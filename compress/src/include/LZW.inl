@@ -307,8 +307,10 @@ make_bitwise_numeric(const Numeric number)
     }
 
     // tailing
-    ret.data[required_byte_blocks - 1].bit = additional_tailing_bits;
-    ret.data[required_byte_blocks - 1].num &= tailing_compliment;
+    if (additional_tailing_bits != 0) {
+        ret.data[required_byte_blocks - 1].bit = additional_tailing_bits;
+        ret.data[required_byte_blocks - 1].num &= tailing_compliment;
+    }
     return ret;
 }
 

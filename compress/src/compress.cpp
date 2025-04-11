@@ -45,22 +45,23 @@ int main(const int argc, const char** argv)
 
     try {
         const Arguments args(argc, argv, arguments);
-        bitwise_numeric_stack<12> stack, stack2;
-        stack.emplace(0x24);
-        stack.emplace(0x2D);
-        stack.emplace(0x121);
-        stack.emplace(0x3E);
-        stack.emplace(0x9D);
-        stack.emplace(0x1F2);
-        stack.emplace(0x3F1);
-        stack.emplace(0x12F);
-        stack.emplace(0x1A);
-        stack.emplace(0x13);
-        stack.emplace(0x13E);
-        stack.emplace(0x78);
+        bitwise_numeric_stack<24> stack, stack2;
+        stack.emplace(0x2423);
+        stack.emplace(0x2D21);
+        stack.emplace(0x1212);
+        stack.emplace(0x3E3);
+        stack.emplace(0x9D42);
+        stack.emplace(0x1F21);
+        stack.emplace(0x3F21);
+        stack.emplace(0x12F32);
+        stack.emplace(0x1A2);
+        stack.emplace(0x131);
+        stack.emplace(0x13E32);
+        stack.emplace(0x7811);
         auto exported = stack.dump();
-        stack2.import(exported, stack.size());
         debug::log(exported, "\n");
+
+        stack2.import(exported, stack.size());
 
 		for (uint64_t i = 0; i < stack2.size(); i++)
 		{
