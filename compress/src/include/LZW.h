@@ -24,6 +24,7 @@
 #include <vector>
 #include <array>
 #include <cstdint>
+#include "log.hpp"
 
 template <typename T>
 concept UnsignedIntegral = std::is_integral_v<T> && std::is_unsigned_v<T>;
@@ -69,8 +70,11 @@ public:
 
     [[nodiscard]] uint64_t export_numeric() const
     {
+        STATIC_WARNING_TEMPLATE(bitwise_numeric,
+            BIT_SIZE > 64,
+            "[WARNING]: You are using bit size larger than 64 bit. export_numeric() will trim the numeric within 64bit range!");
 		uint64_t ret = 0;
-		for (unsigned i = 0; i < required_byte_blocks; i++)
+		for (unsigned i = 0; i < std::min(required_byte_blocks, 8u); i++)
 		{
 			ret |= (static_cast<uint64_t>(data[i].num) << (i * 8));
 		}

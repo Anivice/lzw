@@ -34,6 +34,40 @@
 #include <atomic>
 #include <iomanip>
 
+#if defined(__GNUC__)
+#define DEPRECATE(foo, msg) foo __attribute__((deprecated(msg)))
+#elif defined(_MSC_VER)
+#define DEPRECATE(foo, msg) __declspec(deprecated(msg)) foo
+#else
+#error This compiler is not supported
+#endif
+
+#define PP_CAT(x,y) PP_CAT1(x,y)
+#define PP_CAT1(x,y) x##y
+
+namespace detail
+{
+    struct true_type {};
+    struct false_type {};
+    template <int test> struct converter : public true_type {};
+    template <> struct converter<0> : public false_type {};
+}
+
+#define STATIC_WARNING(cond, msg) \
+struct PP_CAT(static_warning,__LINE__) { \
+	DEPRECATE(void _(::detail::false_type const& ),msg) {}; \
+	void _(::detail::true_type const& ) {}; \
+	PP_CAT(static_warning,__LINE__)() {_(::detail::converter<(cond)>());} \
+}
+
+// Note: using STATIC_WARNING_TEMPLATE changes the meaning of a program in a small way.
+// It introduces a member/variable declaration.  This means at least one byte of space
+// in each structure/class instantiation.  STATIC_WARNING should be preferred in any 
+// non-template situation.
+//  'token' must be a program-wide unique identifier.
+#define STATIC_WARNING_TEMPLATE(token, cond, msg) \
+    STATIC_WARNING(cond, msg) PP_CAT(PP_CAT(_localvar_, token),__LINE__)
+
 #define construct_simple_type_compare(type)                             \
     template <typename T>                                               \
     struct is_##type : std::false_type {};                              \
@@ -162,16 +196,6 @@ namespace debug {
     template <typename T>
     constexpr bool is_pair_v = is_pair<T>::value;
 
-    template <typename Container>
-    std::enable_if_t<is_container_v<Container> && !is_map_v<Container>
-        && !is_unordered_map_v<Container>,
-        void>
-        print_container(const Container& container);
-
-    template <typename Map>
-    std::enable_if_t<is_map_v<Map> || is_unordered_map_v<Map>, void>
-        print_container(const Map& map);
-
     extern std::mutex log_mutex;
     template <typename ParamType>
     void _log(const ParamType& param);
@@ -183,11 +207,10 @@ namespace debug {
     template <typename... Args> void log(const Args&... args);
 
     template <typename Container>
-    std::enable_if_t < debug::is_container_v<Container>
-        && !debug::is_map_v<Container>
-        && !debug::is_unordered_map_v<Container>
-        , void >
-        print_container(const Container& container)
+	requires debug::is_container_v<Container> &&
+		!debug::is_map_v<Container> &&
+        !debug::is_unordered_map_v<Container>
+	void print_container(const Container& container)
     {
         LOG_DEV << "[";
         for (auto it = std::begin(container); it != std::end(container); ++it)
@@ -195,7 +218,8 @@ namespace debug {
             if (sizeof(*it) == 1 /* 8bit data width */)
             {
                 LOG_DEV << "0x" << std::hex << std::setw(2) << std::setfill('0') << static_cast<unsigned>(*it);
-            } else {
+            }
+            else {
                 _log(*it);
             }
 
@@ -206,21 +230,21 @@ namespace debug {
         LOG_DEV << "]";
     }
 
-    template <typename Map>
-    std::enable_if_t < debug::is_map_v<Map> || debug::is_unordered_map_v<Map>, void >
-        print_container(const Map& map)
+	template <typename Map>
+	requires debug::is_map_v<Map> || debug::is_unordered_map_v<Map>
+	void print_container(const Map & map)
     {
-        LOG_DEV << "{";
-        for (auto it = std::begin(map); it != std::end(map); ++it)
-        {
-            _log(it->first);
-            LOG_DEV << ": ";
-            _log(it->second);
-            if (std::next(it) != std::end(map)) {
-                LOG_DEV << ", ";
-            }
-        }
-        LOG_DEV << "}";
+    	LOG_DEV << "{";
+    	for (auto it = std::begin(map); it != std::end(map); ++it)
+    	{
+    		_log(it->first);
+    		LOG_DEV << ": ";
+    		_log(it->second);
+    		if (std::next(it) != std::end(map)) {
+    			LOG_DEV << ", ";
+    		}
+    	}
+    	LOG_DEV << "}";
     }
 
     extern std::string str_true;

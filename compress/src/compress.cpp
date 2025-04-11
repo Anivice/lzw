@@ -45,7 +45,7 @@ int main(const int argc, const char** argv)
 
     try {
         const Arguments args(argc, argv, arguments);
-        bitwise_numeric_stack<24> stack, stack2;
+        bitwise_numeric_stack<128> stack, stack2;
         stack.emplace(0x2423);
         stack.emplace(0x2D21);
         stack.emplace(0x1212);
