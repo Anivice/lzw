@@ -7,6 +7,7 @@
 #include <cstring>
 
 #include "LZW.h"
+#include "log.hpp"
 
 #define COMPUTE_8BIT_COMPLIMENT(bit) ((uint8_t)(0xFF >> (8 - (bit))))
 
@@ -443,7 +444,7 @@ std::array <uint8_t, required_bytes > bitcopy(
 	// copy continuous bytes
 	for (uint8_t i = 0; i < continuous_bytes; i++)
 	{
-		unpacked[i + 1] = data[byte_starting + i + 1];
+		unpacked.push_back(data[byte_starting + i + 1]);
 	}
 
 	// copy last byte
@@ -570,7 +571,7 @@ void bitwise_numeric_stack<BIT_SIZE>::import(const std::vector<uint8_t>& data, u
 	auto add_offset = [&](const uint8_t off)->void {
 		// add offset
 		bit_offset += off;
-		if (bit_offset >= 8)
+		while (bit_offset >= 8)
 		{
 			byte_offset++;
 			bit_offset -= 8;
@@ -603,12 +604,12 @@ void bitwise_numeric_stack<BIT_SIZE>::import(const std::vector<uint8_t>& data, u
                 bit_offset, 
                 static_cast<uint8_t>(BIT_SIZE), 
                 data);
+        // increase offset
+        add_offset(BIT_SIZE);
 
         // import result
         import_numeric(result);
-
-        // increase offset
-        add_offset(BIT_SIZE);
+		//debug::log(result, "\n");
     }
 }
 

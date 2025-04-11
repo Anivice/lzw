@@ -45,19 +45,19 @@ int main(const int argc, const char** argv)
 
     try {
         const Arguments args(argc, argv, arguments);
-        bitwise_numeric_stack<6> stack, stack2;
+        bitwise_numeric_stack<12> stack, stack2;
         stack.emplace(0x24);
-        stack.emplace(0x0D);
-        stack.emplace(0x21);
-        stack.emplace(0x0E);
-        stack.emplace(0x0D);
-        stack.emplace(0x12);
-        stack.emplace(0x30);
-        stack.emplace(0x1F);
+        stack.emplace(0x2D);
+        stack.emplace(0x121);
+        stack.emplace(0x3E);
+        stack.emplace(0x9D);
+        stack.emplace(0x1F2);
+        stack.emplace(0x3F1);
+        stack.emplace(0x12F);
         stack.emplace(0x1A);
         stack.emplace(0x13);
-        stack.emplace(0x1E);
-        stack.emplace(0x08);
+        stack.emplace(0x13E);
+        stack.emplace(0x78);
         auto exported = stack.dump();
         stack2.import(exported, stack.size());
         debug::log(exported, "\n");
