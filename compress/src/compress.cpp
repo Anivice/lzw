@@ -45,7 +45,7 @@ int main(const int argc, const char** argv)
 
     try {
         const Arguments args(argc, argv, arguments);
-        bitwise_numeric_stack<6> stack;
+        bitwise_numeric_stack<6> stack, stack2;
         stack.emplace(0x24);
         stack.emplace(0x0D);
         stack.emplace(0x21);
@@ -56,9 +56,16 @@ int main(const int argc, const char** argv)
         stack.emplace(0x1F);
         stack.emplace(0x1A);
         stack.emplace(0x13);
-        stack.emplace(0x1E);  
+        stack.emplace(0x1E);
         stack.emplace(0x08);
         auto exported = stack.dump();
+        stack2.import(exported, stack.size());
+        debug::log(exported, "\n");
+
+		for (uint64_t i = 0; i < stack2.size(); i++)
+		{
+			std::cout << "    " << stack2[i].export_numeric() << "\n";
+		}
 
         return EXIT_SUCCESS;
     } catch (const std::exception &e) {

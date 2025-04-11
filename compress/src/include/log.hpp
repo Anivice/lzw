@@ -32,6 +32,7 @@
 #include <map>
 #include <unordered_map>
 #include <atomic>
+#include <iomanip>
 
 #define construct_simple_type_compare(type)                             \
     template <typename T>                                               \
@@ -191,7 +192,13 @@ namespace debug {
         LOG_DEV << "[";
         for (auto it = std::begin(container); it != std::end(container); ++it)
         {
-            _log(*it);
+            if (sizeof(*it) == 1 /* 8bit data width */)
+            {
+                LOG_DEV << "0x" << std::hex << std::setw(2) << std::setfill('0') << static_cast<unsigned>(*it);
+            } else {
+                _log(*it);
+            }
+
             if (std::next(it) != std::end(container)) {
                 LOG_DEV << ", ";
             }

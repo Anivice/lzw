@@ -27,6 +27,8 @@
 template <typename T>
 concept UnsignedIntegral = std::is_integral_v<T> && std::is_unsigned_v<T>;
 
+template < unsigned BIT_SIZE > class bitwise_numeric_stack;
+
 template <
     const unsigned BIT_SIZE,
     const unsigned current_bit_size = BIT_SIZE,
@@ -64,14 +66,29 @@ public:
         return this->data;
     }
 
+    [[nodiscard]] uint64_t export_numeric() const
+    {
+		uint64_t ret = 0;
+		for (unsigned i = 0; i < required_byte_blocks; i++)
+		{
+			ret |= (static_cast<uint64_t>(data[i].num) << (i * 8));
+		}
+		return ret;
+    }
+
     template < UnsignedIntegral Numeric >
     static bitwise_numeric make_bitwise_numeric(Numeric);
+
+    friend class bitwise_numeric_stack<BIT_SIZE>;
 };
 
 template < unsigned BIT_SIZE >
 class bitwise_numeric_stack {
 private:
     std::vector< bitwise_numeric < BIT_SIZE > > string;
+    const unsigned current_bit_size = BIT_SIZE;
+    const unsigned required_byte_blocks = BIT_SIZE / 8 + (BIT_SIZE % 8 == 0 ? 0 : 1);
+    const unsigned additional_tailing_bits = BIT_SIZE % 8;
 
 public:
     void push(const bitwise_numeric<BIT_SIZE> & element) {
@@ -82,6 +99,22 @@ public:
         string.pop_back();
     }
 
+    [[nodiscard]] uint64_t size() const {
+        return string.size();
+    }
+
+    [[nodiscard]] const bitwise_numeric<BIT_SIZE> & top() {
+        return string.back();
+	}
+
+    [[nodiscard]] bitwise_numeric<BIT_SIZE>& at(const uint64_t index) {
+        return string[index];
+    }
+
+	[[nodiscard]] bitwise_numeric<BIT_SIZE>& operator [](const uint64_t index) {
+		return string[index];
+	}
+
     template < typename Numeric >
     void emplace(const Numeric number)
     {
@@ -90,11 +123,11 @@ public:
     }
 
     [[nodiscard]] std::vector<uint8_t> dump() const;
-    void import(const std::vector<uint8_t> &);
+    void import(const std::vector<uint8_t> &, uint64_t);
 };
 
-class LZW {
-
+class LZW
+{
 };
 
 #endif //LZW_H
