@@ -70,9 +70,11 @@ public:
 
     [[nodiscard]] uint64_t export_numeric() const
     {
-        STATIC_WARNING_TEMPLATE(bitwise_numeric,
-            BIT_SIZE > 64,
-            "[WARNING]: You are using bit size larger than 64 bit. export_numeric() will trim the numeric within 64bit range!");
+        if constexpr (BIT_SIZE > 64)
+        {
+			throw std::overflow_error("Bitwise overflow");
+        }
+
 		uint64_t ret = 0;
 		for (unsigned i = 0; i < std::min(required_byte_blocks, 8u); i++)
 		{
