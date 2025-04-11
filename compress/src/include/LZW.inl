@@ -4,6 +4,7 @@
 #include <iostream>
 #include <ostream>
 #include <algorithm>
+#include <cstring>
 
 #include "LZW.h"
 

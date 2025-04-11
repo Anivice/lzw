@@ -23,6 +23,7 @@
 
 #include <vector>
 #include <array>
+#include <cstdint>
 
 template <typename T>
 concept UnsignedIntegral = std::is_integral_v<T> && std::is_unsigned_v<T>;
