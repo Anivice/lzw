@@ -207,9 +207,9 @@ namespace debug {
     template <typename... Args> void log(const Args&... args);
 
     template <typename Container>
-	requires debug::is_container_v<Container> &&
+	requires (debug::is_container_v<Container> &&
 		!debug::is_map_v<Container> &&
-        !debug::is_unordered_map_v<Container>
+        !debug::is_unordered_map_v<Container>)
 	void print_container(const Container& container)
     {
         LOG_DEV << "[";
@@ -231,7 +231,7 @@ namespace debug {
     }
 
 	template <typename Map>
-	requires debug::is_map_v<Map> || debug::is_unordered_map_v<Map>
+	requires (debug::is_map_v<Map> || debug::is_unordered_map_v<Map>)
 	void print_container(const Map & map)
     {
     	LOG_DEV << "{";
