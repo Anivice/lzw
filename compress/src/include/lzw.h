@@ -105,11 +105,12 @@ public:
         return ret;
     }
 
-	template < unsigned_integral Numeric >
-    [[nodiscard]] Numeric export_numeric() const
+	template < typename NumericType >
+    requires std::is_integral_v < NumericType >
+    [[nodiscard]] NumericType export_numeric() const
     {
-        Numeric ret { };
-		for (unsigned i = 0; i < std::min(static_cast<uint64_t>(RequiredByteBlocks), sizeof(Numeric)); i++)
+        NumericType ret { };
+		for (unsigned i = 0; i < std::min(static_cast<uint64_t>(RequiredByteBlocks), sizeof(NumericType)); i++)
 		{
 			((uint8_t*)(&ret))[i] = data[i].num;
 		}
@@ -117,14 +118,12 @@ public:
     }
 
     template < unsigned_integral Numeric >
-    static
-	[[nodiscard]] bitwise_numeric make_bitwise_numeric(Numeric);
+    [[nodiscard]] static bitwise_numeric make_bitwise_numeric(Numeric);
 
 	// loosely structured
     template < typename Numeric >
     requires std::is_integral_v < Numeric >
-    static
-	[[nodiscard]] bitwise_numeric make_bitwise_numeric_loosely(Numeric numeric)
+    [[nodiscard]] static bitwise_numeric make_bitwise_numeric_loosely(Numeric numeric)
     {
 		return make_bitwise_numeric(static_cast<std::make_unsigned_t<Numeric>>(numeric));
     }
@@ -134,7 +133,7 @@ public:
     friend class bitwise_numeric_stack<BitSize>;
 };
 
-enum endian_t:uint8_t { LITTLE_ENDIAN, BIG_ENDIAN };
+enum endian_t : uint8_t { LITTLE_ENDIAN = 0, BIG_ENDIAN };
 
 template < unsigned BitSize >
 class bitwise_numeric_stack {
