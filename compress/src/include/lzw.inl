@@ -1,13 +1,30 @@
+/* lzw.inl
+ *
+ * Copyright 2025 Anivice Ives
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 #ifndef LZW_INL
 #define LZW_INL
 
 #include <iostream>
-#include <ostream>
 #include <algorithm>
 #include <cstring>
-
 #include "lzw.h"
-#include "log.hpp"
 
 template < unsigned BitSize, unsigned RequiredBytes = BitSize / 8 + (BitSize % 8 == 0 ? 0 : 1) >
 [[nodiscard]]
@@ -595,8 +612,8 @@ std::vector<uint8_t> bitwise_numeric_stack<BitSize>::dump() const
 			& COMPUTE_8_BIT_COMPLIMENT(tail_size)
 			& COMPUTE_8_BIT_COMPLIMENT(current_effective_bits);
 		// now, we add the tailing current to the previous, forming the conjunction we wanted
-		const uint8_t conjuncted = static_cast<uint8_t>((tailing_current << previous_effective_bits) | previous);
-        // then, check for effective bits in conjuncted
+		const auto conjuncted = static_cast<uint8_t>((tailing_current << previous_effective_bits) | previous);
+        // then, check for effective bits in conjunction
         const uint8_t conj_effective_bits = std::min(
             static_cast<uint8_t>(previous_effective_bits + current_effective_bits), 
             static_cast<uint8_t>(8));
@@ -742,7 +759,7 @@ std::array < uint8_t, RequiredBytes > bitcopy(
                 & COMPUTE_8_BIT_COMPLIMENT(tail_size)
                 & COMPUTE_8_BIT_COMPLIMENT(current_effective_bits);
             // now, we add the tailing current to the previous, forming the conjunction we wanted
-            const uint8_t conjuncted = static_cast<uint8_t>((tailing_current << previous_effective_bits) | previous);
+            const auto conjuncted = static_cast<uint8_t>((tailing_current << previous_effective_bits) | previous);
             // then, check for effective bits in conjuncted
             const uint8_t conj_effective_bits = std::min(
                 static_cast<uint8_t>(previous_effective_bits + current_effective_bits),

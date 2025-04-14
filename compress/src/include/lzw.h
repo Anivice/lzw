@@ -24,7 +24,6 @@
 #include <vector>
 #include <array>
 #include <cstdint>
-#include <ios>
 #include <unordered_map>
 #include "log.hpp"
 
@@ -186,7 +185,7 @@ public:
     [[nodiscard]] std::vector<uint8_t> dump() const;
     void import(const std::vector<uint8_t> &, uint64_t);
     void lazy_import(const std::vector<uint8_t>&);
-    uint64_t hash() const;
+    [[nodiscard]] uint64_t hash() const;
 };
 
 template <typename Type>

@@ -45,12 +45,13 @@ include_directories(src/include)
 
 add_library(log OBJECT src/log.cpp src/include/log.hpp)
 add_library(arg_parser OBJECT src/argument_parser.cpp src/include/argument_parser.h)
-add_library(lzw OBJECT src/lzw.cpp src/include/lzw.h)
+add_library(lzw OBJECT src/lzw.cpp src/include/lzw.h src/include/utils.h src/utils.cpp)
 
 add_executable(compress src/compress.cpp)
-add_executable(uncompress src/uncompress.cpp)
+add_executable(decompress src/decompress.cpp)
 target_link_libraries(compress PRIVATE log arg_parser lzw)
-target_link_libraries(uncompress PRIVATE log arg_parser lzw)
+target_link_libraries(decompress PRIVATE log arg_parser lzw)
 
 add_executable(bitwise tests/bitwise.cpp)
 target_link_libraries(bitwise log arg_parser lzw)
+add_test(NAME "General Bitwise operations" COMMAND ${CMAKE_CURRENT_BINARY_DIR}/bitwise)

@@ -314,7 +314,6 @@ namespace debug {
 
     template <typename... Args> void log(const Args &...args)
     {
-        setvbuf(LOG_DEV_FILE, nullptr, _IONBF, 0);
         std::lock_guard<std::mutex> lock(log_mutex);
         debug::_log(args...);
         LOG_DEV << std::flush;

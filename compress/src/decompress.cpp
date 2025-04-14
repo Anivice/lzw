@@ -1,4 +1,4 @@
-/* compress.cpp
+/* decompress.cpp
  *
  * Copyright 2025 Anivice Ives
  *
@@ -61,18 +61,24 @@ void decompress_from_stdin()
     set_binary();
     std::vector<uint8_t> in_buffer;
     std::vector<uint8_t> out_buffer;
+
     while (std::cin.good())
     {
         in_buffer.resize(4096);
-        std::cin.read(reinterpret_cast<char*>(in_buffer.data()), static_cast<std::streamsize>(in_buffer.size()));
+        uint16_t block_size = 0;
+        std::cin.read(reinterpret_cast<char*>(&block_size), sizeof(uint16_t));
+        if (!std::cin.good()) {
+            break;
+        }
+        std::cin.read(reinterpret_cast<char*>(in_buffer.data()), block_size);
         const auto read_size = std::cin.gcount();
+        if (read_size != block_size) {
+            throw std::runtime_error("Decompression failed due to data corruption");
+        }
         in_buffer.resize(read_size);
         lzw <12> compressor(in_buffer, out_buffer);
-        compressor.compress();
-        const auto data_len = static_cast<uint16_t>(out_buffer.size());
-        std::cout.write((char*)(&data_len), sizeof(uint16_t));
+        compressor.decompress();
         std::cout.write(reinterpret_cast<char*>(out_buffer.data()), static_cast<std::streamsize>(out_buffer.size()));
-        std::cout.flush();
     }
 }
 
@@ -94,14 +100,19 @@ void decompress_file(const std::string& in, const std::string& out)
         std::vector<uint8_t> buffer(4096);
         std::vector<uint8_t> output;
         output.reserve(4096);
-        input_file.read(reinterpret_cast<char*>(buffer.data()), static_cast<std::streamsize>(buffer.size()));
+
+        const auto data_len = static_cast<uint16_t>(output.size());
+        input_file.read((char*)(&data_len), sizeof(data_len));
+        input_file.read(reinterpret_cast<char*>(buffer.data()), data_len);
         const auto bytes_read = input_file.gcount();
+        if (data_len != bytes_read) {
+            throw std::runtime_error("File corrupted!");
+        }
         buffer.resize(bytes_read);
         lzw <12> compressor(buffer, output);
-        compressor.compress();
-        const auto data_len = static_cast<uint16_t>(output.size());
-        output_file.write((char*)(&data_len), sizeof(data_len));
-        output_file.write(reinterpret_cast<const char*>(output.data()), static_cast<std::streamsize>(output.size()));
+        compressor.decompress();
+        output_file.write(reinterpret_cast<const char*>(output.data()),
+            static_cast<std::streamsize>(output.size()));
     }
 }
 
@@ -129,7 +140,7 @@ int main(const int argc, const char** argv)
 				}
 
                 if (const auto last_dot = path.find_last_of('.');
-                    last_dot != std::string::npos) 
+                    last_dot != std::string::npos)
                 {
 					path = path.substr(0, last_dot);
                 }
@@ -146,7 +157,7 @@ int main(const int argc, const char** argv)
 
         if (static_cast<Arguments::args_t>(args).contains("BARE"))
         {
-			debug::log(debug::to_stderr, debug::error_log, 
+			debug::log(debug::to_stderr, debug::error_log,
                 "Unknown options:", static_cast<Arguments::args_t>(args).at("BARE"), "\n\n");
 			print_help();
 			return EXIT_FAILURE;
