@@ -52,7 +52,7 @@ Arguments::predefined_args_t arguments = {
     Arguments::single_arg_t {
         .name = "decompress",
         .short_name = 'd',
-        .value_required = true,
+        .value_required = false,
         .explanation = "Decompress flag (no effect)"
     },
 };
