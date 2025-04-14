@@ -803,7 +803,7 @@ std::array < uint8_t, RequiredBytes > bitcopy(
 }
 
 template<unsigned BitSize>
-void bitwise_numeric_stack<BitSize>::import(const std::vector<uint8_t>& data, uint64_t expected_len)
+void bitwise_numeric_stack<BitSize>::import(const std::vector<uint8_t>& data, const uint64_t expected_len)
 {
     // clear stack
     stack_frame_.clear();
@@ -1038,8 +1038,8 @@ void lzw<LzwCompressionBitSize, DictionarySize>::decompress()
 	source_stack.lazy_import(source_dump);
 
     // The first code is popped out and assigned to current_string
-    current_string = static_cast<char>(source_stack[0].export_numeric<uint8_t>());
-	output_stream_.push_back(dictionary_.at(current_string).export_numeric<uint8_t>());
+    current_string = static_cast<char>(source_stack[0].template export_numeric<uint8_t>());
+	output_stream_.push_back(dictionary_.at(current_string).template export_numeric<uint8_t>());
 
     for (uint64_t i = 1; i < source_stack.size(); i++)
     {

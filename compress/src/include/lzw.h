@@ -133,7 +133,7 @@ public:
     friend class bitwise_numeric_stack<BitSize>;
 };
 
-enum endian_t : uint8_t { LITTLE_ENDIAN = 0, BIG_ENDIAN };
+enum endian_t { LITTLE_ENDIAN, BIG_ENDIAN };
 
 template < unsigned BitSize >
 class bitwise_numeric_stack {
