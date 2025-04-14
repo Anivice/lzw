@@ -54,4 +54,4 @@ target_link_libraries(decompress PRIVATE log arg_parser lzw)
 
 add_executable(bitwise tests/bitwise.cpp)
 target_link_libraries(bitwise log arg_parser lzw)
-add_test(NAME "General Bitwise operations" COMMAND ${CMAKE_CURRENT_BINARY_DIR}/bitwise)
+add_test(NAME "General_Bitwise_operations" COMMAND ${CMAKE_CURRENT_BINARY_DIR}/bitwise)
