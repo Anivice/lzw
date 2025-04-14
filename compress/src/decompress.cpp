@@ -68,6 +68,12 @@ void decompress_from_stdin()
     std::vector<uint8_t> in_buffer;
     std::vector<uint8_t> out_buffer;
 
+    char magick_buff[3];
+    std::cin.read(magick_buff, sizeof(magick_buff));
+    if (std::memcmp(magick_buff, magic, sizeof(magick_buff)) != 0) {
+        throw std::runtime_error("Decompression failed due to invalid magick number");
+    }
+
     while (std::cin.good())
     {
         in_buffer.resize(4096);
@@ -99,6 +105,12 @@ void decompress_file(const std::string& in, const std::string& out)
 
     if (!output_file.is_open()) {
         throw std::runtime_error("Failed to open output file: " + out);
+    }
+
+    char magick_buff[3];
+    input_file.read(magick_buff, sizeof(magick_buff));
+    if (std::memcmp(magick_buff, magic, sizeof(magick_buff)) != 0) {
+        throw std::runtime_error("Decompression failed due to invalid magick number");
     }
 
     while (input_file)

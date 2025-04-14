@@ -24,4 +24,6 @@
 bool is_stdout_pipe();
 void set_binary();
 
+constexpr unsigned char magic[] = { 0x1f, 0x9d, 0x0c };
+
 #endif //UTILS_H

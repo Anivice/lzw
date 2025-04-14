@@ -61,6 +61,7 @@ void compress_from_stdin()
     set_binary();
     std::vector<uint8_t> in_buffer;
     std::vector<uint8_t> out_buffer;
+    std::cout.write((char*)(magic), sizeof(magic));
     while (std::cin.good())
     {
         in_buffer.resize(4096);
@@ -89,6 +90,7 @@ void compress_file(const std::string& in, const std::string& out)
         throw std::runtime_error("Failed to open output file: " + out);
     }
 
+    output_file.write((char*)(magic), sizeof(magic));
     while (input_file)
     {
         std::vector<uint8_t> buffer(4096);
