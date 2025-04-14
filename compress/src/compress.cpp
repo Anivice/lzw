@@ -1,6 +1,6 @@
 #include "log.hpp"
 #include "argument_parser.h"
-#include "LZW.h"
+#include "lzw.h"
 
 #ifdef WIN32
 # include <windows.h>
@@ -35,6 +35,8 @@ Arguments::predefined_args_t arguments = {
     },
 };
 
+#include <sstream>
+
 int main(const int argc, const char** argv)
 {
 #if defined(__DEBUG__)
@@ -45,29 +47,27 @@ int main(const int argc, const char** argv)
 
     try {
         const Arguments args(argc, argv, arguments);
-        bitwise_numeric_stack<128> stack, stack2;
-        stack.emplace(0x2423);
-        stack.emplace(0x2D21);
-        stack.emplace(0x1212);
-        stack.emplace(0x3E3);
-        stack.emplace(0x9D42);
-        stack.emplace(0x1F21);
-        stack.emplace(0x3F21);
-        stack.emplace(0x12F32);
-        stack.emplace(0x1A2);
-        stack.emplace(0x131);
-        stack.emplace(0x13E32);
-        stack.emplace(0x7811);
-        auto exported = stack.dump();
-        debug::log(exported, "\n");
+        std::string data = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC";
+        using vec_t = std::vector<uint8_t>;
+		vec_t input_stream(data.begin(), data.end());
+		vec_t output_stream_compressed;
+        vec_t output_decompressed;
+        lzw <9> lzw_decompress(output_stream_compressed, output_decompressed);
+        lzw <9> lzw_compress(input_stream, output_stream_compressed);
 
-        stack2.import(exported, stack.size());
+        // compress
+        lzw_compress.compress();
+		vec_t backup = output_stream_compressed;
+        // decompress
+        lzw_decompress.decompress();
 
-		for (uint64_t i = 0; i < stack2.size(); i++)
-		{
-			std::cout << "    " << stack2[i].export_numeric() << "\n";
-		}
-
+        debug::log(debug::to_stderr, debug::info_log, "Original data: ", std::vector<uint8_t>(data.begin(), data.end()), "\n");
+        debug::log(debug::to_stderr, debug::info_log, "Compressed data: ", backup, "\n");
+        debug::log(debug::to_stderr, debug::info_log, "Decompressed data: ", std::dec, output_decompressed, "\n");
+        debug::log(debug::to_stderr, debug::info_log, "Decompressed data length: ", std::dec, output_decompressed.size(), "\n");
+        debug::log(debug::to_stderr, debug::info_log, "Original data length: ", std::dec, data.size(), "\n");
+        debug::log(debug::to_stderr, debug::info_log, "Compressed data length: ", std::dec, backup.size(), "\n");
+        debug::log(debug::to_stderr, debug::info_log, "Compression ratio: ", std::dec, (float)(data.size() - backup.size()) / (float)data.size() * 100, "%\n");
         return EXIT_SUCCESS;
     } catch (const std::exception &e) {
         debug::log(debug::to_stderr, debug::error_log, e.what(), "\n");

@@ -46,7 +46,7 @@ include_directories(src/include)
 
 add_library(log OBJECT src/log.cpp src/include/log.hpp)
 add_library(arg_parser OBJECT src/argument_parser.cpp src/include/argument_parser.h)
-add_library(lzw OBJECT src/LZW.cpp src/include/LZW.h)
+add_library(lzw OBJECT src/LZW.cpp "src/include/lzw.h")
 
 add_executable(compress src/compress.cpp)
 add_executable(uncompress src/uncompress.cpp)

@@ -1,4 +1,4 @@
-/* LZW.h
+/* lzw.h
  *
  * Copyright 2025 Anivice Ives
  *
@@ -24,29 +24,31 @@
 #include <vector>
 #include <array>
 #include <cstdint>
+#include <ios>
+#include <unordered_map>
 #include "log.hpp"
 
 template <typename T>
-concept UnsignedIntegral = std::is_integral_v<T> && std::is_unsigned_v<T>;
+concept unsigned_integral = std::is_integral_v<T> && std::is_unsigned_v<T>;
 
-template < unsigned BIT_SIZE > class bitwise_numeric_stack;
+template < unsigned BitSize > class bitwise_numeric_stack;
 
 template <
-    const unsigned BIT_SIZE,
-    const unsigned current_bit_size = BIT_SIZE,
-    const unsigned required_byte_blocks = current_bit_size / 8 + (current_bit_size % 8 == 0 ? 0 : 1),
-    const unsigned additional_tailing_bits = current_bit_size % 8 >
+    const unsigned BitSize,
+    const unsigned CurrentBitSize = BitSize,
+    const unsigned RequiredByteBlocks = CurrentBitSize / 8 + (CurrentBitSize % 8 == 0 ? 0 : 1),
+    const unsigned AdditionalTailingBits = CurrentBitSize % 8 >
 class bitwise_numeric {
 private:
-    const uint64_t lm_checksum =
-        ((static_cast<uint64_t>(current_bit_size) << 32) | (required_byte_blocks))
-        ^ static_cast<uint64_t>(additional_tailing_bits);
+    const uint64_t lm_checksum_ =
+        ((static_cast<uint64_t>(CurrentBitSize) << 32) | (RequiredByteBlocks))
+        ^ static_cast<uint64_t>(AdditionalTailingBits);
 
     struct byte {
         uint8_t num {};
         uint8_t bit {};
     };
-    std::array<byte, required_byte_blocks> data { };
+    std::array<byte, RequiredByteBlocks> data { };
 
     static bool overflow(uint16_t, uint8_t);
 
@@ -54,89 +56,170 @@ public:
     bitwise_numeric(bitwise_numeric &&) noexcept;
     bitwise_numeric(const bitwise_numeric &);
     bitwise_numeric() = default;
-    bitwise_numeric operator +(bitwise_numeric &);
-    bitwise_numeric operator -(bitwise_numeric &);
-    bool operator ==(bitwise_numeric &);
-    bool operator !=(bitwise_numeric &);
-    bitwise_numeric operator ^(bitwise_numeric &);
-    bitwise_numeric operator |(bitwise_numeric &);
-    bitwise_numeric operator &(bitwise_numeric &);
+	~bitwise_numeric() = default;
+
+    // operations
+    bitwise_numeric operator +(const bitwise_numeric &) const;
+    bitwise_numeric operator -(const bitwise_numeric &) const;
+    bitwise_numeric operator ^(const bitwise_numeric &) const;
+    bitwise_numeric operator |(const bitwise_numeric &) const;
+    bitwise_numeric operator &(const bitwise_numeric &) const;
+	template < unsigned_integral Numeric > bitwise_numeric operator <<(Numeric) const;
+    template < unsigned_integral Numeric > bitwise_numeric operator >>(Numeric) const;
+    bitwise_numeric & operator ++();
+    bitwise_numeric & operator --();
     bitwise_numeric & operator =(bitwise_numeric &&) noexcept;
     bitwise_numeric & operator =(const bitwise_numeric&);
+
+    // utilities
+    [[nodiscard]] bool operator ==(const bitwise_numeric&) const;
+    [[nodiscard]] bool operator !=(const bitwise_numeric&) const;
+    [[nodiscard]] bool operator <(const bitwise_numeric&) const;
+    [[nodiscard]] bool operator >(const bitwise_numeric&) const;
+
+    [[nodiscard]] bool operator >=(const bitwise_numeric& other) const
+	{
+		return operator>(other) || operator==(other);
+	}
+
+    [[nodiscard]] bool operator <=(const bitwise_numeric& other) const
+    {
+        return operator<(other) || operator==(other);
+    }
+
+    
     [[nodiscard]] const decltype(data) & dump() const
     {
         return this->data;
     }
 
-    [[nodiscard]] uint64_t export_numeric() const
+    [[nodiscard]] std::vector < uint8_t > dump_to_vector() const
     {
-        if constexpr (BIT_SIZE > 64)
-        {
-			throw std::overflow_error("Bitwise overflow");
-        }
-
-		uint64_t ret = 0;
-		for (unsigned i = 0; i < std::min(required_byte_blocks, 8u); i++)
+        std::vector < uint8_t > ret;
+		ret.resize(RequiredByteBlocks);
+		for (unsigned i = 0; i < RequiredByteBlocks; i++)
 		{
-			ret |= (static_cast<uint64_t>(data[i].num) << (i * 8));
+            ret.push_back(data[i].num);
+		}
+
+        return ret;
+    }
+
+	template < unsigned_integral Numeric >
+    [[nodiscard]] Numeric export_numeric() const
+    {
+        Numeric ret { };
+		for (unsigned i = 0; i < std::min(static_cast<uint64_t>(RequiredByteBlocks), sizeof(Numeric)); i++)
+		{
+			((uint8_t*)(&ret))[i] = data[i].num;
 		}
 		return ret;
     }
 
-    template < UnsignedIntegral Numeric >
-    static bitwise_numeric make_bitwise_numeric(Numeric);
+    template < unsigned_integral Numeric >
+    static
+	[[nodiscard]] bitwise_numeric make_bitwise_numeric(Numeric);
 
-    friend class bitwise_numeric_stack<BIT_SIZE>;
+	// loosely structured
+    template < typename Numeric >
+    requires std::is_integral_v < Numeric >
+    static
+	[[nodiscard]] bitwise_numeric make_bitwise_numeric_loosely(Numeric numeric)
+    {
+		return make_bitwise_numeric(static_cast<std::make_unsigned_t<Numeric>>(numeric));
+    }
+
+    [[nodiscard]] bitwise_numeric max_num() const;
+
+    friend class bitwise_numeric_stack<BitSize>;
 };
 
-template < unsigned BIT_SIZE >
+enum endian_t:uint8_t { LITTLE_ENDIAN, BIG_ENDIAN };
+
+template < unsigned BitSize >
 class bitwise_numeric_stack {
 private:
-    std::vector< bitwise_numeric < BIT_SIZE > > string;
-    const unsigned current_bit_size = BIT_SIZE;
-    const unsigned required_byte_blocks = BIT_SIZE / 8 + (BIT_SIZE % 8 == 0 ? 0 : 1);
-    const unsigned additional_tailing_bits = BIT_SIZE % 8;
+    std::vector< bitwise_numeric < BitSize > > stack_frame_;
+    const unsigned current_bit_size = BitSize;
+    const unsigned required_byte_blocks = BitSize / 8 + (BitSize % 8 == 0 ? 0 : 1);
+    const unsigned additional_tailing_bits = BitSize % 8;
 
 public:
-    void push(const bitwise_numeric<BIT_SIZE> & element) {
-        string.emplace_back(element);
+    void push(const bitwise_numeric<BitSize> & element) {
+        stack_frame_.emplace_back(element);
     }
 
     void pop() {
-        string.pop_back();
+        stack_frame_.pop_back();
     }
 
     [[nodiscard]] uint64_t size() const {
-        return string.size();
+        return stack_frame_.size();
     }
 
-    [[nodiscard]] const bitwise_numeric<BIT_SIZE> & top() {
-        return string.back();
+    [[nodiscard]] const bitwise_numeric<BitSize> & top() {
+        return stack_frame_.back();
 	}
 
-    [[nodiscard]] bitwise_numeric<BIT_SIZE>& at(const uint64_t index) {
-        return string[index];
+    [[nodiscard]] bitwise_numeric<BitSize>& at(const uint64_t index) {
+        return stack_frame_[index];
     }
 
-	[[nodiscard]] bitwise_numeric<BIT_SIZE>& operator [](const uint64_t index) {
-		return string[index];
+	[[nodiscard]] bitwise_numeric<BitSize>& operator [](const uint64_t index) {
+		return stack_frame_[index];
 	}
 
     template < typename Numeric >
     void emplace(const Numeric number)
     {
         using unsigned_type = std::make_unsigned_t<Numeric>;
-        push(bitwise_numeric<BIT_SIZE>::make_bitwise_numeric(static_cast<unsigned_type>(number)));
+        push(bitwise_numeric<BitSize>::make_bitwise_numeric(static_cast<unsigned_type>(number)));
     }
 
     [[nodiscard]] std::vector<uint8_t> dump() const;
     void import(const std::vector<uint8_t> &, uint64_t);
+    void lazy_import(const std::vector<uint8_t>&);
+    uint64_t hash() const;
 };
 
-class LZW
+template <typename Type>
+constexpr Type two_power(const Type n)
 {
+    static_assert(std::is_integral_v<Type>, "Type must be an integral type");
+    return static_cast<Type>(0x01) << n;
+}
+
+template < 
+    unsigned LzwCompressionBitSize,
+    unsigned DictionarySize = two_power(LzwCompressionBitSize) >
+requires (LzwCompressionBitSize > 8)
+class lzw
+{
+	std::vector < uint8_t > & input_stream_;
+    std::vector < uint8_t > & output_stream_;
+	std::unordered_map < std::string, bitwise_numeric < LzwCompressionBitSize > > dictionary_;
+    bool discarding_this_instance = false;
+
+public:
+    explicit lzw(
+        std::vector < uint8_t >& input_stream,
+        std::vector < uint8_t >& output_stream);
+
+	// forbid any copy/move constructor or assignment
+	lzw(const lzw&) = delete;
+	lzw(lzw&&) = delete;
+	lzw& operator =(const lzw&) = delete;
+	lzw& operator =(lzw&&) = delete;
+
+	// destructor
+	~lzw() = default;
+
+    // basic operations
+	void compress();
+	void decompress();
 };
 
 #endif //LZW_H
 
-#include "LZW.inl"
+// inline definition for lzw utilities
+#include "lzw.inl"

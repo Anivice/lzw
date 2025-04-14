@@ -1,4 +1,4 @@
-/* LZW.cpp
+/* lzw.cpp
  *
  * Copyright 2025 Anivice Ives
  *
@@ -18,4 +18,4 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include "LZW.h"
+#include "lzw.h"
