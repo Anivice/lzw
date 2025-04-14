@@ -1,6 +1,7 @@
 #include "log.hpp"
 #include "argument_parser.h"
 #include "lzw.h"
+#include <fstream>
 
 #ifdef WIN32
 # include <windows.h>
@@ -35,8 +36,6 @@ Arguments::predefined_args_t arguments = {
     },
 };
 
-#include <sstream>
-
 int main(const int argc, const char** argv)
 {
 #if defined(__DEBUG__)
@@ -47,28 +46,103 @@ int main(const int argc, const char** argv)
 
     try {
         const Arguments args(argc, argv, arguments);
-        std::string data = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC";
-        using vec_t = std::vector<uint8_t>;
-		vec_t input_stream(data.begin(), data.end());
-		vec_t output_stream_compressed;
-        vec_t output_decompressed;
-        lzw <9> lzw_decompress(output_stream_compressed, output_decompressed);
-        lzw <9> lzw_compress(input_stream, output_stream_compressed);
 
-        // compress
-        lzw_compress.compress();
-		vec_t backup = output_stream_compressed;
-        // decompress
-        lzw_decompress.decompress();
+        auto print_help = [&]()->void
+            {
+                std::string path = *argv;
+                const auto end = path.find_last_of('/');
+                const auto end_w = path.find_last_of('\\');
+				if (end != std::string::npos) {
+					path = path.substr(end + 1);
+				}
+				else if (end_w != std::string::npos) {
+					path = path.substr(end_w + 1);
+				}
 
-        debug::log(debug::to_stderr, debug::info_log, "Original data: ", std::vector<uint8_t>(data.begin(), data.end()), "\n");
-        debug::log(debug::to_stderr, debug::info_log, "Compressed data: ", backup, "\n");
-        debug::log(debug::to_stderr, debug::info_log, "Decompressed data: ", std::dec, output_decompressed, "\n");
-        debug::log(debug::to_stderr, debug::info_log, "Decompressed data length: ", std::dec, output_decompressed.size(), "\n");
-        debug::log(debug::to_stderr, debug::info_log, "Original data length: ", std::dec, data.size(), "\n");
-        debug::log(debug::to_stderr, debug::info_log, "Compressed data length: ", std::dec, backup.size(), "\n");
-        debug::log(debug::to_stderr, debug::info_log, "Compression ratio: ", std::dec, (float)(data.size() - backup.size()) / (float)data.size() * 100, "%\n");
+                if (const auto last_dot = path.find_last_of('.');
+                    last_dot != std::string::npos) 
+                {
+					path = path.substr(0, last_dot);
+                }
+
+                std::cout << path << " [OPTIONS]" << std::endl;
+                std::cout << "OPTIONS: " << std::endl;
+                args.print_help();
+            };
+
+        auto compress_file = [&](const std::string& in, const std::string& out)->void
+            {
+                std::ifstream input_file(in, std::ios::binary);
+                std::ofstream output_file(out, std::ios::binary);
+
+                if (!input_file.is_open()) {
+                    throw std::runtime_error("Failed to open input file: " + in);
+                }
+
+                if (!output_file.is_open()) {
+                    throw std::runtime_error("Failed to open output file: " + out);
+                }
+
+                while (input_file)
+                {
+                    std::vector<uint8_t> buffer(4096);
+                    std::vector<uint8_t> output;
+                    output.reserve(4096);
+                    input_file.read(reinterpret_cast<char*>(buffer.data()), static_cast<std::streamsize>(buffer.size()));
+                    const auto bytes_read = input_file.gcount();
+                    buffer.resize(bytes_read);
+                    lzw <12> compressor(buffer, output);
+                    compressor.compress();
+                    const auto data_len = static_cast<uint16_t>(output.size());
+                    output_file.write((char*)(&data_len), sizeof(data_len));
+					output_file.write(reinterpret_cast<const char*>(output.data()), static_cast<std::streamsize>(output.size()));
+                }
+            };
+
+        if (static_cast<Arguments::args_t>(args).contains("help")) {
+            print_help();
+            return EXIT_SUCCESS;
+        }
+        else if (static_cast<Arguments::args_t>(args).contains("BARE"))
+        {
+			debug::log(debug::to_stderr, debug::error_log, 
+                "Unknown options:", static_cast<Arguments::args_t>(args).at("BARE"), "\n\n");
+			print_help();
+			return EXIT_FAILURE;
+        }
+		else if (static_cast<Arguments::args_t>(args).contains("version")) {
+			std::cout << "LZW Utility version " << LZW_UTIL_VERSION << std::endl;
+			return EXIT_SUCCESS;
+		}
+        else if (static_cast<Arguments::args_t>(args).contains("input")) 
+        {
+			const auto input_file = static_cast<Arguments::args_t>(args).at("input");
+			if (input_file.size() != 1) {
+				throw std::invalid_argument("Multiple input files provided");
+			}
+
+            if (!static_cast<Arguments::args_t>(args).contains("output"))
+            {
+				throw std::invalid_argument("Output file not provided");
+            }
+
+			const auto output_file = static_cast<Arguments::args_t>(args).at("output");
+            if (output_file.size() != 1) {
+                throw std::invalid_argument("Multiple output files provided");
+            }
+
+			compress_file(input_file[0], output_file[0]);
+            return EXIT_SUCCESS;
+        }
+    	else {
+			// TODO: Read from stdin
+		}
+
         return EXIT_SUCCESS;
+    } catch (const std::invalid_argument& e) {
+        debug::log(debug::to_stderr, debug::error_log, e.what(), "\n\n",
+			"Use `-h` or `--help` to see detailed help information.\n");
+        return EXIT_FAILURE;
     } catch (const std::exception &e) {
         debug::log(debug::to_stderr, debug::error_log, e.what(), "\n");
         return EXIT_FAILURE;

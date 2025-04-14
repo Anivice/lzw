@@ -36,7 +36,10 @@ set(CMAKE_VISIBILITY_INLINES_HIDDEN 1)
 
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
     add_compile_definitions(__DEBUG__=\(1\))
+    enable_testing()
 endif ()
+
+add_compile_definitions(LZW_UTIL_VERSION=\"0.0.1\")
 
 include_directories(src/include)
 
@@ -48,3 +51,6 @@ add_executable(compress src/compress.cpp)
 add_executable(uncompress src/uncompress.cpp)
 target_link_libraries(compress PRIVATE log arg_parser lzw)
 target_link_libraries(uncompress PRIVATE log arg_parser lzw)
+
+add_executable(bitwise tests/bitwise.cpp)
+target_link_libraries(bitwise log arg_parser lzw)

@@ -9,15 +9,13 @@
 #include "lzw.h"
 #include "log.hpp"
 
-#define COMPUTE_8_BIT_COMPLIMENT(bit) ((uint8_t)(0xFF >> (8 - (bit))))
-
 template < unsigned BitSize, unsigned RequiredBytes = BitSize / 8 + (BitSize % 8 == 0 ? 0 : 1) >
 [[nodiscard]]
 std::array < uint8_t, RequiredBytes >
 bitcopy(
-    const uint64_t,
-    const uint8_t,
-    const uint8_t,
+    uint64_t,
+    uint8_t,
+    uint8_t,
     const std::vector < uint8_t >&);
 
 template < unsigned BitSize >
@@ -110,10 +108,7 @@ operator+(const bitwise_numeric & other) const
         ret.data[i].num = byte_result & 0xFF;
     }
 
-    if (carry) {
-        throw std::overflow_error("Bitwise overflow");
-    }
-
+    ret.overflow_ = carry;
     return ret;
 }
 
@@ -143,10 +138,7 @@ operator-(const bitwise_numeric & other) const
         ret.data[i].num = byte_result & 0xFF;
     }
 
-    if (carry) {
-        throw std::overflow_error("Bitwise overflow");
-    }
-
+    ret.overflow_ = carry;
     return ret;
 }
 
@@ -243,6 +235,27 @@ template <
     const unsigned CurrentBitSize,
     const unsigned RequiredByteBlocks,
     const unsigned AdditionalTailingBits >
+bitwise_numeric<BitSize, CurrentBitSize, RequiredByteBlocks, AdditionalTailingBits>
+bitwise_numeric<BitSize, CurrentBitSize, RequiredByteBlocks, AdditionalTailingBits>::operator~() const
+{
+    bitwise_numeric <BitSize> ret;
+    ret.data = this->data;
+
+    for (unsigned i = 0; i < this->data.size(); i++)
+    {
+        const uint16_t complement = COMPUTE_8_BIT_COMPLIMENT(ret.data[i].bit);
+        ret.data[i].num = ~ret.data[i].num;
+        ret.data[i].num &= complement;
+    }
+
+    return ret;
+}
+
+template <
+    const unsigned BitSize,
+    const unsigned CurrentBitSize,
+    const unsigned RequiredByteBlocks,
+    const unsigned AdditionalTailingBits >
 bitwise_numeric<BitSize, CurrentBitSize, RequiredByteBlocks, AdditionalTailingBits> &
 bitwise_numeric<BitSize, CurrentBitSize, RequiredByteBlocks, AdditionalTailingBits>::
 operator=(bitwise_numeric && other) noexcept
@@ -292,11 +305,15 @@ operator <(const bitwise_numeric& other) const
 
 	for (int64_t i = RequiredByteBlocks - 1; i >= 0; --i)
 	{
-		if ((other.data[i].num & COMPUTE_8_BIT_COMPLIMENT(other.data[i].bit)) >
-            (this->data[i].num & COMPUTE_8_BIT_COMPLIMENT(this->data[i].bit)))
-        {
-            return false;
-		}
+	    const auto other_8_bit = other.data[i].num & COMPUTE_8_BIT_COMPLIMENT(other.data[i].bit);
+	    const auto my_8_bit = this->data[i].num & COMPUTE_8_BIT_COMPLIMENT(this->data[i].bit);
+	    if (my_8_bit > other_8_bit) {
+	        return false;
+	    } else if (my_8_bit < other_8_bit) {
+	        return true;
+	    } else {
+	        continue;
+	    }
 	}
 
 	return true;
@@ -1016,7 +1033,7 @@ void lzw<LzwCompressionBitSize, DictionarySize>::decompress()
 			}
 		}
 
-		throw std::out_of_range("Code not found in dictionary");
+		throw std::out_of_range("Index code not found in dictionary. Corrupted incoming data?");
 	};
 
     std::vector<uint8_t> source_dump;

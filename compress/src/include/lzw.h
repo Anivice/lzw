@@ -28,6 +28,9 @@
 #include <unordered_map>
 #include "log.hpp"
 
+#define COMPUTE_8_BIT_COMPLIMENT(bit) ((uint8_t)(0xFF >> (8 - (bit))))
+#define COMPUTE_N_BIT_COMPLIMENT(bit, nbit) (  ( (~(0x01ull << (bit))) << ((nbit) - (bit)) ) >> ((nbit) - (bit))  )
+
 template <typename T>
 concept unsigned_integral = std::is_integral_v<T> && std::is_unsigned_v<T>;
 
@@ -51,6 +54,7 @@ private:
     std::array<byte, RequiredByteBlocks> data { };
 
     static bool overflow(uint16_t, uint8_t);
+    int overflow_ = 0;
 
 public:
     bitwise_numeric(bitwise_numeric &&) noexcept;
@@ -64,12 +68,16 @@ public:
     bitwise_numeric operator ^(const bitwise_numeric &) const;
     bitwise_numeric operator |(const bitwise_numeric &) const;
     bitwise_numeric operator &(const bitwise_numeric &) const;
+    bitwise_numeric operator ~() const;
 	template < unsigned_integral Numeric > bitwise_numeric operator <<(Numeric) const;
     template < unsigned_integral Numeric > bitwise_numeric operator >>(Numeric) const;
     bitwise_numeric & operator ++();
     bitwise_numeric & operator --();
     bitwise_numeric & operator =(bitwise_numeric &&) noexcept;
     bitwise_numeric & operator =(const bitwise_numeric&);
+    [[nodiscard]] bool is_overflow() const {
+        return overflow_;
+    }
 
     // utilities
     [[nodiscard]] bool operator ==(const bitwise_numeric&) const;
@@ -112,7 +120,7 @@ public:
         NumericType ret { };
 		for (unsigned i = 0; i < std::min(static_cast<uint64_t>(RequiredByteBlocks), sizeof(NumericType)); i++)
 		{
-			((uint8_t*)(&ret))[i] = data[i].num;
+			((uint8_t*)(&ret))[i] = data[i].num & COMPUTE_8_BIT_COMPLIMENT(data[i].bit);
 		}
 		return ret;
     }
@@ -190,7 +198,7 @@ constexpr Type two_power(const Type n)
 
 template < 
     unsigned LzwCompressionBitSize,
-    unsigned DictionarySize = two_power(LzwCompressionBitSize) >
+    unsigned DictionarySize = two_power(LzwCompressionBitSize) - 1 >
 requires (LzwCompressionBitSize > 8)
 class lzw
 {
