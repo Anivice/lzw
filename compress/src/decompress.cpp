@@ -49,6 +49,12 @@ Arguments::predefined_args_t arguments = {
         .value_required = false,
         .explanation = "Get LZW utility version"
     },
+    Arguments::single_arg_t {
+        .name = "decompress",
+        .short_name = 'd',
+        .value_required = true,
+        .explanation = "Decompress flag (no effect)"
+    },
 };
 
 void decompress_from_stdin()
