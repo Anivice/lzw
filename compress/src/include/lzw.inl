@@ -903,7 +903,7 @@ uint64_t bitwise_numeric_stack<BitSize>::hash() const
     auto get_checksum = [&](const endian_t endian)->uint64_t
         {
             // add the final complement that ECMA-182 requires
-            return (endian == BIG_ENDIAN
+            return (endian == big_endian
                 ? reverse_bytes(crc64_value ^ 0xFFFFFFFFFFFFFFFFULL)
                 : (crc64_value ^ 0xFFFFFFFFFFFFFFFFULL));
         };
@@ -911,7 +911,7 @@ uint64_t bitwise_numeric_stack<BitSize>::hash() const
     init_crc64();
     const auto dumped = dump();
 	update(dumped.data(), dumped.size());
-	return get_checksum(BIG_ENDIAN);
+	return get_checksum(big_endian);
 }
 
 template < unsigned LzwCompressionBitSize, unsigned DictionarySize >
