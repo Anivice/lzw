@@ -51,7 +51,7 @@ Arguments::predefined_args_t arguments = {
     },
 };
 
-void decompress_from_stdin()
+void compress_from_stdin()
 {
     if (!is_stdout_pipe()) {
         throw std::runtime_error("Compression data cannot be written to console");
@@ -76,7 +76,7 @@ void decompress_from_stdin()
     }
 }
 
-void decompress_file(const std::string& in, const std::string& out)
+void compress_file(const std::string& in, const std::string& out)
 {
     std::ifstream input_file(in, std::ios::binary);
     std::ofstream output_file(out, std::ios::binary);
@@ -174,11 +174,11 @@ int main(const int argc, const char** argv)
                 throw std::invalid_argument("Multiple output files provided");
             }
 
-			decompress_file(input_file[0], output_file[0]);
+			compress_file(input_file[0], output_file[0]);
             return EXIT_SUCCESS;
         }
 
-        decompress_from_stdin();
+        compress_from_stdin();
         return EXIT_SUCCESS;
     } catch (const std::invalid_argument& e) {
         debug::log(debug::to_stderr, debug::error_log, e.what(), "\n\n",
