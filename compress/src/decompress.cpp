@@ -24,6 +24,7 @@
 #include "utils.h"
 #include <fstream>
 #include <thread>
+#include <chrono>
 
 Arguments::predefined_args_t arguments = {
     Arguments::single_arg_t {
