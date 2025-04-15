@@ -56,15 +56,24 @@ Arguments::predefined_args_t arguments = {
         .value_required = true,
         .explanation = "Multi-thread compression"
     },
+    Arguments::single_arg_t {
+        .name = "verbose",
+        .short_name = 'V',
+        .value_required = false,
+        .explanation = "Enable verbose mode"
+    },
 };
 
 std::atomic < unsigned > thread_count = 1;
+std::atomic < bool > verbose = false;
 
 void decompress_on_one_block(std::vector<uint8_t> * in_buffer, std::vector<uint8_t> * out_buffer)
 {
     lzw <LZW_COMPRESSION_BIT_SIZE> decompressor(*in_buffer, *out_buffer);
     decompressor.decompress();
 }
+
+std::atomic < uint64_t > processed_size = 0;
 
 bool decompress(std::basic_istream<char>& input, std::basic_ostream<char>& output)
 {
@@ -131,12 +140,14 @@ bool decompress(std::basic_istream<char>& input, std::basic_ostream<char>& outpu
     for (unsigned i = 0; i < thread_count; ++i) {
         auto & out_buffer = out_buffers[i];
         if (!out_buffer.empty()) {
+            processed_size += out_buffer.size();
             output.write(reinterpret_cast<char*>(out_buffer.data()), static_cast<std::streamsize>(out_buffer.size()));
         }
     }
 
     return true;
 }
+
 void decompress_from_stdin()
 {
     if (!is_stdout_pipe()) {
@@ -178,12 +189,42 @@ void decompress_file(const std::string& in, const std::string& out)
         throw std::runtime_error("Decompression failed due to invalid magick number");
     }
 
+    const auto before = std::chrono::system_clock::now();
+
     while (input_file)
     {
         if (!decompress(input_file, output_file)) {
             break;
         }
+
+        const auto after = std::chrono::system_clock::now();
+        if (const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(after - before).count();
+            verbose && processed_size > 0 && duration > 0)
+        {
+            std::stringstream ss;
+            if (const auto bps = processed_size * 8 / duration * 1000;
+                bps > 1024 * 1024)
+            {
+                ss << processed_size * 8 << " bits processed, speed " << bps / 1024 / 1024 << " Mbps";
+            } else if (bps > 10 * 1024) {
+                ss << processed_size * 8 << " bits processed, speed " << bps / 1024 << " Kbps";
+            } else {
+                ss << processed_size * 8 << " bits processed, speed " << bps << " bps";
+            }
+
+            debug::log(debug::to_stderr,
+                debug::cursor_off,
+                debug::clear_line,
+                debug::info_log, ss.str(), "\n");
+        }
     }
+
+    if (verbose) {
+        debug::log(debug::to_stderr, debug::cursor_on);
+    }
+
+    input_file.close();
+    output_file.close();
 }
 
 int main(const int argc, const char** argv)
@@ -250,6 +291,12 @@ int main(const int argc, const char** argv)
                     "Press Enter to confirm or Ctrl+C to abort > ");
                 getchar();
             }
+        }
+
+        verbose = static_cast<Arguments::args_t>(args).contains("verbose");
+        if (verbose) {
+            debug::set_log_level(debug::L_INFO_FG);
+            debug::log(debug::to_stderr, debug::info_log, "Verbose mode enabled\n");
         }
 
         if (static_cast<Arguments::args_t>(args).contains("input"))

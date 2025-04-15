@@ -199,9 +199,9 @@ void compress_file(const std::string& in, const std::string& out)
         }
 
         const auto after = std::chrono::system_clock::now();
-        if (verbose) {
-            const auto duration =
-                std::chrono::duration_cast<std::chrono::milliseconds>(after - before).count();
+        if (const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(after - before).count();
+            verbose && original_size > 0 && duration > 0)
+        {
             std::stringstream ss;
             if (const auto bps = original_size * 8 / duration * 1000;
                 bps > 1024 * 1024)
@@ -220,12 +220,12 @@ void compress_file(const std::string& in, const std::string& out)
         }
     }
 
-    input_file.close();
-    output_file.close();
-
     if (verbose) {
         debug::log(debug::to_stderr, debug::cursor_on);
     }
+
+    input_file.close();
+    output_file.close();
 }
 
 int main(const int argc, const char** argv)
