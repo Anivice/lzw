@@ -50,6 +50,25 @@ std::string debug::str_false = "False";
 decltype(debug::log_level) debug::log_level = L_INFO_FG;
 decltype(debug::current_level) debug::current_level = L_INFO_FG;
 
+debug::log_level_t debug::set_log_level(const debug::log_level_t level)
+{
+    if (const auto env_level = getEnvVar("LOG_LEVEL");
+        env_level.empty())
+    {
+        debug::log_level = level;
+    } else if (env_level == "info") {
+        debug::log_level = debug::L_INFO_FG;
+    } else if (env_level == "debug") {
+        debug::log_level = debug::L_DEBUG_FG;
+    } else if (env_level == "warning") {
+        debug::log_level = debug::L_WARNING_FG;
+    } else if (env_level == "error") {
+        debug::log_level = debug::L_ERROR_FG;
+    }
+
+    return debug::log_level;
+}
+
 class init_log_level {
 public:
     init_log_level()

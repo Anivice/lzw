@@ -24,6 +24,9 @@
 bool is_stdout_pipe();
 void set_binary();
 
-constexpr unsigned char magic[] = { 0x1f, 0x9d, 0x0c };
+#define LZW_COMPRESSION_BIT_SIZE 9
+#define BLOCK_SIZE (1024 * 16)
+
+constexpr unsigned char magic[] = { 0x1f, 0x9d, LZW_COMPRESSION_BIT_SIZE };
 
 #endif //UTILS_H

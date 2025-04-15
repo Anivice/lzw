@@ -149,6 +149,15 @@ namespace debug {
     inline class to_stderr_t {} to_stderr;
     construct_simple_type_compare(to_stderr_t);
 
+    inline class clear_line_t {} clear_line;
+    construct_simple_type_compare(clear_line_t);
+
+    inline class cursor_off_t {} cursor_off;
+    construct_simple_type_compare(cursor_off_t);
+
+    inline class cursor_on_t {} cursor_on;
+    construct_simple_type_compare(cursor_on_t);
+
     template <typename T>
     struct is_pair : std::false_type
     {
@@ -219,6 +228,7 @@ namespace debug {
     enum log_level_t { L_DEBUG_FG = 0, L_INFO_FG, L_WARNING_FG, L_ERROR_FG };
     extern std::atomic < log_level_t > log_level;
     extern std::atomic < log_level_t > current_level;
+    log_level_t set_log_level(log_level_t level);
 
     template <typename ParamType> void _log(const ParamType& param)
     {
@@ -297,6 +307,15 @@ namespace debug {
             debug::LOG_DEV_FILE = stdout;
 #endif
         }
+        else if constexpr (debug::is_clear_line_t_v<ParamType>) {
+            LOG_DEV << "\033[F\033[K";
+        }
+        else if constexpr (debug::is_cursor_off_t_v<ParamType>) {
+            LOG_DEV << "\033[?25l";
+        }
+        else if constexpr (debug::is_cursor_on_t_v<ParamType>) {
+            LOG_DEV << "\033[?25h";
+        }
         else {
             if (suppression_level_check()) {
                 LOG_DEV << param;
@@ -316,8 +335,6 @@ namespace debug {
     {
         std::lock_guard<std::mutex> lock(log_mutex);
         debug::_log(args...);
-        LOG_DEV << std::flush;
-        fflush(LOG_DEV_FILE);
     }
 }
 

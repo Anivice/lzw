@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="PublishConfigData" remoteFilesAllowedToDisappearOnAutoupload="false">
+    <serverData>
+      <paths name="ArchLinux (b872fbcf-0583-445e-ab22-6dffe15f987d)">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/tmp/tmp.MvSrxdLTDt/compress" local="$PROJECT_DIR$" />
+          </mappings>
+          <excludedPaths>
+            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-debug-visual-studio" />
+            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-minsizerel" />
+            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-release-archlinux" />
+            <excludedPath local="true" path="$PROJECT_DIR$/out/build/x64-release" />
+            <excludedPath local="true" path="$PROJECT_DIR$/out" />
+            <excludedPath local="true" path="$PROJECT_DIR$/out/build/x86-debug" />
+            <excludedPath local="true" path="$PROJECT_DIR$/out/build/x86-release" />
+            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-debug-archlinux-coverage" />
+            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-debug-archlinux" />
+            <excludedPath local="true" path="$PROJECT_DIR$/out/build/x64-debug" />
+          </excludedPaths>
+        </serverdata>
+      </paths>
+    </serverData>
+  </component>
+</project>

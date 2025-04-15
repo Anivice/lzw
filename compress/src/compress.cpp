@@ -23,6 +23,8 @@
 #include "lzw.h"
 #include "utils.h"
 #include <fstream>
+#include <thread>
+#include <chrono>
 
 Arguments::predefined_args_t arguments = {
     Arguments::single_arg_t {
@@ -49,7 +51,116 @@ Arguments::predefined_args_t arguments = {
         .value_required = false,
         .explanation = "Get LZW utility version"
     },
+    Arguments::single_arg_t {
+        .name = "threads",
+        .short_name = 'T',
+        .value_required = true,
+        .explanation = "Multi-thread compression"
+    },
+    Arguments::single_arg_t {
+        .name = "verbose",
+        .short_name = 'V',
+        .value_required = false,
+        .explanation = "Enable verbose mode"
+    },
 };
+
+std::atomic < unsigned > thread_count = 1;
+std::atomic < bool > verbose = false;
+
+void compress_on_one_block(std::vector<uint8_t> * in_buffer, std::vector<uint8_t> * out_buffer)
+{
+    std::vector<uint8_t> buffer_backup = *in_buffer;
+    std::vector<uint8_t> compressed_data;
+    lzw <LZW_COMPRESSION_BIT_SIZE> compressor(*in_buffer, compressed_data);
+    compressor.compress();
+    const auto data_len = static_cast<uint16_t>(compressed_data.size());
+    if (data_len > BLOCK_SIZE) { // expanded
+        out_buffer->push_back(0);
+        out_buffer->push_back(0);
+        out_buffer->insert(out_buffer->end(), buffer_backup.begin(), buffer_backup.end());
+        if (verbose) {
+            debug::log(debug::to_stderr, debug::debug_log,
+                "Negative compression ratio (",
+                static_cast<double>(static_cast<int64_t>(buffer_backup.size()) - static_cast<int64_t>(data_len)) /
+                    static_cast<double>(buffer_backup.size()) * 100.0,
+                "%), dumping raw data...\n");
+        }
+    } else {
+        out_buffer->push_back(((uint8_t*)&data_len)[0]);
+        out_buffer->push_back(((uint8_t*)&data_len)[1]);
+        out_buffer->insert(out_buffer->end(), compressed_data.begin(), compressed_data.end());
+    }
+}
+
+std::atomic < int64_t > original_size = 0;
+std::atomic < int64_t > compressed_size = 0;
+
+bool compress(std::basic_istream<char>& input, std::basic_ostream<char>& output)
+{
+    if (!input.good()) {
+        return false;
+    }
+
+    std::vector < std::vector<uint8_t> > in_buffers;
+    std::vector < std::vector<uint8_t> > out_buffers;
+    std::vector < std::thread > threads;
+    in_buffers.resize(thread_count);
+    out_buffers.resize(thread_count);
+
+    // read in queue
+    for (unsigned i = 0; i < thread_count; ++i)
+    {
+        auto & in_buffer = in_buffers[i];
+        in_buffer.resize(BLOCK_SIZE);
+        input.read(reinterpret_cast<char*>(in_buffer.data()), static_cast<std::streamsize>(in_buffer.size()));
+        if (!input.good()) {
+            in_buffer.clear();
+            break;
+        }
+        const auto actual_size = input.gcount();
+        if (actual_size == 0) {
+            break;
+        }
+
+        original_size += actual_size;
+        in_buffer.resize(actual_size);
+    }
+
+    // create workers
+    for (unsigned i = 0; i < thread_count; ++i)
+    {
+        if (!in_buffers[i].empty()) {
+            threads.emplace_back(compress_on_one_block, &in_buffers[i], &out_buffers[i]);
+        }
+    }
+
+    // waiting for them to finish
+    for (auto & thread : threads) {
+        if (thread.joinable()) {
+            thread.join();
+        }
+    }
+
+    // write data in order
+    for (unsigned i = 0; i < thread_count; ++i) {
+        auto & out_buffer = out_buffers[i];
+        if (!out_buffer.empty()) {
+            compressed_size += static_cast<int64_t>(out_buffer.size());
+            output.write(reinterpret_cast<char*>(out_buffer.data()), static_cast<std::streamsize>(out_buffer.size()));
+        }
+    }
+
+    if (verbose && original_size > 0) {
+        debug::log(debug::to_stderr, debug::debug_log, "Original size:     ", original_size * 8, " Bits\n");
+        debug::log(debug::to_stderr, debug::debug_log, "Compressed size:   ", compressed_size * 8, " Bits\n");
+        debug::log(debug::to_stderr, debug::debug_log, "Compression ratio: ",
+            (static_cast<double>(original_size) - static_cast<double>(compressed_size))
+                / static_cast<double>(original_size) * 100.0, " %\n");
+    }
+
+    return true;
+}
 
 void compress_from_stdin()
 {
@@ -59,22 +170,14 @@ void compress_from_stdin()
 
     // Set stdin and stdout to binary mode
     set_binary();
-    std::vector<uint8_t> in_buffer;
-    std::vector<uint8_t> out_buffer;
     std::cout.write((char*)(magic), sizeof(magic));
-    while (std::cin.good())
-    {
-        in_buffer.resize(4096);
-        std::cin.read(reinterpret_cast<char*>(in_buffer.data()), static_cast<std::streamsize>(in_buffer.size()));
-        const auto read_size = std::cin.gcount();
-        in_buffer.resize(read_size);
-        lzw <12> compressor(in_buffer, out_buffer);
-        compressor.compress();
-        const auto data_len = static_cast<uint16_t>(out_buffer.size());
-        std::cout.write((char*)(&data_len), sizeof(uint16_t));
-        std::cout.write(reinterpret_cast<char*>(out_buffer.data()), static_cast<std::streamsize>(out_buffer.size()));
-        std::cout.flush();
+    while (std::cin.good()) {
+        if (!compress(std::cin, std::cout)) {
+            break;
+        }
     }
+
+    std::cout.flush();
 }
 
 void compress_file(const std::string& in, const std::string& out)
@@ -90,56 +193,88 @@ void compress_file(const std::string& in, const std::string& out)
         throw std::runtime_error("Failed to open output file: " + out);
     }
 
+    const auto before = std::chrono::system_clock::now();
+
     output_file.write((char*)(magic), sizeof(magic));
-    while (input_file)
-    {
-        std::vector<uint8_t> buffer(4096);
-        std::vector<uint8_t> output;
-        output.reserve(4096);
-        input_file.read(reinterpret_cast<char*>(buffer.data()), static_cast<std::streamsize>(buffer.size()));
-        const auto bytes_read = input_file.gcount();
-        buffer.resize(bytes_read);
-        lzw <12> compressor(buffer, output);
-        compressor.compress();
-        const auto data_len = static_cast<uint16_t>(output.size());
-        output_file.write((char*)(&data_len), sizeof(data_len));
-        output_file.write(reinterpret_cast<const char*>(output.data()), static_cast<std::streamsize>(output.size()));
+    while (input_file.good()) {
+        if (!compress(input_file, output_file)) {
+            break;
+        }
+
+        const auto after = std::chrono::system_clock::now();
+        if (verbose) {
+            const auto duration =
+                std::chrono::duration_cast<std::chrono::milliseconds>(after - before).count();
+            std::stringstream ss;
+            if (const auto bps = original_size * 8 / duration * 1000;
+                bps > 1024 * 1024)
+            {
+                ss << original_size * 8 << " bits processed, speed " << bps / 1024 / 1024 << " Mbps";
+            } else if (bps > 10 * 1024) {
+                ss << original_size * 8 << " bits processed, speed " << bps / 1024 << " Kbps";
+            } else {
+                ss << original_size * 8 << " bits processed, speed " << bps << " bps";
+            }
+
+            debug::log(debug::to_stderr,
+                debug::cursor_off,
+                debug::clear_line,
+                debug::info_log, ss.str(), "\n");
+        }
+    }
+
+    input_file.close();
+    output_file.close();
+
+    if (verbose) {
+        debug::log(debug::to_stderr, debug::cursor_on);
     }
 }
 
 int main(const int argc, const char** argv)
 {
 #if defined(__DEBUG__)
-    debug::log_level = debug::L_DEBUG_FG;
+    set_log_level(debug::L_DEBUG_FG);
 #else
-    debug::log_level = debug::L_WARNING_FG;
+    set_log_level(debug::L_WARNING_FG);
 #endif
 
     try {
         const Arguments args(argc, argv, arguments);
 
         auto print_help = [&]()->void
+        {
+            std::string path = *argv;
+            const auto end = path.find_last_of('/');
+            const auto end_w = path.find_last_of('\\');
+            if (end != std::string::npos) {
+                path = path.substr(end + 1);
+            }
+            else if (end_w != std::string::npos) {
+                path = path.substr(end_w + 1);
+            }
+
+            if (const auto last_dot = path.find_last_of('.');
+                last_dot != std::string::npos)
             {
-                std::string path = *argv;
-                const auto end = path.find_last_of('/');
-                const auto end_w = path.find_last_of('\\');
-				if (end != std::string::npos) {
-					path = path.substr(end + 1);
-				}
-				else if (end_w != std::string::npos) {
-					path = path.substr(end_w + 1);
-				}
+                path = path.substr(0, last_dot);
+            }
 
-                if (const auto last_dot = path.find_last_of('.');
-                    last_dot != std::string::npos) 
-                {
-					path = path.substr(0, last_dot);
-                }
+            std::cout << path << " [OPTIONS]" << std::endl;
+            std::cout << "OPTIONS: " << std::endl;
+            args.print_help();
+        };
 
-                std::cout << path << " [OPTIONS]" << std::endl;
-                std::cout << "OPTIONS: " << std::endl;
-                args.print_help();
-            };
+        auto verbose_print = [&]()->void
+        {
+            if (verbose && original_size > 0) {
+                debug::log(debug::to_stderr, debug::info_log, "Original size:     ", original_size * 8, " Bits\n");
+                debug::log(debug::to_stderr, debug::info_log, "Compressed size:   ", compressed_size * 8, " Bits\n");
+                debug::log(debug::to_stderr, debug::info_log, "Compression ratio: ",
+                    (static_cast<double>(original_size) - static_cast<double>(compressed_size))
+                        / static_cast<double>(original_size) * 100.0, " %\n");
+            }
+        };
 
         if (static_cast<Arguments::args_t>(args).contains("help")) {
             print_help();
@@ -159,6 +294,26 @@ int main(const int argc, const char** argv)
 			return EXIT_SUCCESS;
 		}
 
+        if (static_cast<Arguments::args_t>(args).contains("threads"))
+        {
+            thread_count = std::strtoul(
+            // disregarding all duplications, apply overriding from the last provided option
+                static_cast<Arguments::args_t>(args).at("threads").back().c_str(),
+                nullptr, 10);
+            if (thread_count > std::thread::hardware_concurrency()) {
+                debug::log(debug::to_stderr, debug::warning_log,
+                    "You are using ", thread_count, " threads, are you SURE? "
+                    "(Press any key to confirm to Ctrl+C to abort)");
+                getchar();
+            }
+        }
+
+        verbose = static_cast<Arguments::args_t>(args).contains("verbose");
+        if (verbose) {
+            debug::set_log_level(debug::L_INFO_FG);
+            debug::log(debug::to_stderr, debug::info_log, "Verbose mode enabled\n");
+        }
+
         if (static_cast<Arguments::args_t>(args).contains("input"))
         {
 			const auto input_file = static_cast<Arguments::args_t>(args).at("input");
@@ -177,10 +332,12 @@ int main(const int argc, const char** argv)
             }
 
 			compress_file(input_file[0], output_file[0]);
+            verbose_print();
             return EXIT_SUCCESS;
         }
 
         compress_from_stdin();
+        verbose_print();
         return EXIT_SUCCESS;
     } catch (const std::invalid_argument& e) {
         debug::log(debug::to_stderr, debug::error_log, e.what(), "\n\n",

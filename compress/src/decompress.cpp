@@ -23,6 +23,7 @@
 #include "lzw.h"
 #include "utils.h"
 #include <fstream>
+#include <thread>
 
 Arguments::predefined_args_t arguments = {
     Arguments::single_arg_t {
@@ -50,13 +51,92 @@ Arguments::predefined_args_t arguments = {
         .explanation = "Get LZW utility version"
     },
     Arguments::single_arg_t {
-        .name = "decompress",
-        .short_name = 'd',
-        .value_required = false,
-        .explanation = "Decompress flag (no effect)"
+        .name = "threads",
+        .short_name = 'T',
+        .value_required = true,
+        .explanation = "Multi-thread compression"
     },
 };
 
+std::atomic < unsigned > thread_count = 1;
+
+void decompress_on_one_block(std::vector<uint8_t> * in_buffer, std::vector<uint8_t> * out_buffer)
+{
+    lzw <LZW_COMPRESSION_BIT_SIZE> decompressor(*in_buffer, *out_buffer);
+    decompressor.decompress();
+}
+
+bool decompress(std::basic_istream<char>& input, std::basic_ostream<char>& output)
+{
+    if (!input.good()) {
+        return false;
+    }
+
+    std::vector < std::vector<uint8_t> > in_buffers;
+    std::vector < std::vector<uint8_t> > out_buffers;
+    std::vector < std::thread > threads;
+    in_buffers.resize(thread_count);
+    out_buffers.resize(thread_count);
+
+    // read in queue
+    for (unsigned i = 0; i < thread_count; ++i)
+    {
+        auto & in_buffer = in_buffers[i];
+        uint16_t block_size = 0;
+        input.read(reinterpret_cast<char*>(&block_size), sizeof(block_size));
+        if (!input.good()) {
+            in_buffer.clear();
+            break;
+        }
+
+        // compressed block
+        if (block_size != 0)
+        {
+            in_buffer.resize(BLOCK_SIZE);
+            input.read(reinterpret_cast<char*>(in_buffer.data()), block_size);
+            const auto actual_size = input.gcount();
+            if (actual_size != block_size) {
+                throw std::runtime_error("Decompression failed, corrupted data?");
+            }
+
+            in_buffer.resize(actual_size);
+        }
+        // negative compression ratio
+        else
+        {
+            in_buffer.clear();
+            auto & out_buffer = out_buffers[i];
+            out_buffer.resize(BLOCK_SIZE);
+            input.read(reinterpret_cast<char*>(out_buffer.data()), BLOCK_SIZE);
+            const auto actual_size = input.gcount();
+            out_buffer.resize(actual_size);
+        }
+    }
+
+    // create workers
+    for (unsigned i = 0; i < thread_count; ++i) {
+        if (!in_buffers[i].empty()) {
+            threads.emplace_back(decompress_on_one_block, &in_buffers[i], &out_buffers[i]);
+        }
+    }
+
+    // waiting for them to finish
+    for (auto & thread : threads) {
+        if (thread.joinable()) {
+            thread.join();
+        }
+    }
+
+    // write data in order
+    for (unsigned i = 0; i < thread_count; ++i) {
+        auto & out_buffer = out_buffers[i];
+        if (!out_buffer.empty()) {
+            output.write(reinterpret_cast<char*>(out_buffer.data()), static_cast<std::streamsize>(out_buffer.size()));
+        }
+    }
+
+    return true;
+}
 void decompress_from_stdin()
 {
     if (!is_stdout_pipe()) {
@@ -65,9 +145,6 @@ void decompress_from_stdin()
 
     // Set stdin and stdout to binary mode
     set_binary();
-    std::vector<uint8_t> in_buffer;
-    std::vector<uint8_t> out_buffer;
-
     char magick_buff[3];
     std::cin.read(magick_buff, sizeof(magick_buff));
     if (std::memcmp(magick_buff, magic, sizeof(magick_buff)) != 0) {
@@ -76,21 +153,9 @@ void decompress_from_stdin()
 
     while (std::cin.good())
     {
-        in_buffer.resize(4096);
-        uint16_t block_size = 0;
-        std::cin.read(reinterpret_cast<char*>(&block_size), sizeof(uint16_t));
-        if (!std::cin.good()) {
+        if (!decompress(std::cin, std::cout)) {
             break;
         }
-        std::cin.read(reinterpret_cast<char*>(in_buffer.data()), block_size);
-        const auto read_size = std::cin.gcount();
-        if (read_size != block_size) {
-            throw std::runtime_error("Decompression failed due to data corruption");
-        }
-        in_buffer.resize(read_size);
-        lzw <12> compressor(in_buffer, out_buffer);
-        compressor.decompress();
-        std::cout.write(reinterpret_cast<char*>(out_buffer.data()), static_cast<std::streamsize>(out_buffer.size()));
     }
 }
 
@@ -115,31 +180,18 @@ void decompress_file(const std::string& in, const std::string& out)
 
     while (input_file)
     {
-        std::vector<uint8_t> buffer(4096);
-        std::vector<uint8_t> output;
-        output.reserve(4096);
-
-        const auto data_len = static_cast<uint16_t>(output.size());
-        input_file.read((char*)(&data_len), sizeof(data_len));
-        input_file.read(reinterpret_cast<char*>(buffer.data()), data_len);
-        const auto bytes_read = input_file.gcount();
-        if (data_len != bytes_read) {
-            throw std::runtime_error("File corrupted!");
+        if (!decompress(input_file, output_file)) {
+            break;
         }
-        buffer.resize(bytes_read);
-        lzw <12> compressor(buffer, output);
-        compressor.decompress();
-        output_file.write(reinterpret_cast<const char*>(output.data()),
-            static_cast<std::streamsize>(output.size()));
     }
 }
 
 int main(const int argc, const char** argv)
 {
 #if defined(__DEBUG__)
-    debug::log_level = debug::L_DEBUG_FG;
+    set_log_level(debug::L_DEBUG_FG);
 #else
-    debug::log_level = debug::L_WARNING_FG;
+    set_log_level(debug::L_WARNING_FG);
 #endif
 
     try {

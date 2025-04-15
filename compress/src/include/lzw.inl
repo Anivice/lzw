@@ -958,8 +958,8 @@ lzw<LzwCompressionBitSize, DictionarySize>::lzw(
 {
     // Initialize the dictionary
     for (int i = 0; i < 256; ++i) {
-        dictionary_[std::string(1, static_cast<char>(i))] = 
-            bitwise_numeric<LzwCompressionBitSize>::make_bitwise_numeric_loosely(i);
+        dictionary_.emplace(std::string(1, static_cast<char>(i)),
+            bitwise_numeric<LzwCompressionBitSize>::make_bitwise_numeric_loosely(i));
     }
 }
 
@@ -989,8 +989,8 @@ void lzw<LzwCompressionBitSize, DictionarySize>::compress()
         // Get input symbol while there are input symbols left
         const auto c = static_cast<char>(input_stream_.back());
         input_stream_.pop_back();
-        const auto combined_string = current_string + c;
-        if (dictionary_.contains(combined_string)) // combined_string is in the table
+        if (const auto combined_string = current_string + c;
+            dictionary_.contains(combined_string)) // combined_string is in the table
         {
             // update current string
             current_string = combined_string;
