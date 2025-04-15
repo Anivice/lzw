@@ -238,6 +238,20 @@ int main(const int argc, const char** argv)
 			return EXIT_SUCCESS;
 		}
 
+        if (static_cast<Arguments::args_t>(args).contains("threads"))
+        {
+            thread_count = std::strtoul(
+            // disregarding all duplications, apply overriding from the last provided option
+                static_cast<Arguments::args_t>(args).at("threads").back().c_str(),
+                nullptr, 10);
+            if (thread_count > std::thread::hardware_concurrency()) {
+                debug::log(debug::to_stderr, debug::warning_log,
+                    "You are using ", thread_count, " threads, are you SURE?\n"
+                    "Press Enter to confirm or Ctrl+C to abort > ");
+                getchar();
+            }
+        }
+
         if (static_cast<Arguments::args_t>(args).contains("input"))
         {
 			const auto input_file = static_cast<Arguments::args_t>(args).at("input");

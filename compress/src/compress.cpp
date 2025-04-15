@@ -302,8 +302,8 @@ int main(const int argc, const char** argv)
                 nullptr, 10);
             if (thread_count > std::thread::hardware_concurrency()) {
                 debug::log(debug::to_stderr, debug::warning_log,
-                    "You are using ", thread_count, " threads, are you SURE? "
-                    "(Press any key to confirm to Ctrl+C to abort)");
+                    "You are using ", thread_count, " threads, are you SURE?\n"
+                    "Press Enter to confirm or Ctrl+C to abort > ");
                 getchar();
             }
         }
