@@ -114,12 +114,9 @@ bool compress(std::basic_istream<char>& input, std::basic_ostream<char>& output)
         auto & in_buffer = in_buffers[i];
         in_buffer.resize(BLOCK_SIZE);
         input.read(reinterpret_cast<char*>(in_buffer.data()), static_cast<std::streamsize>(in_buffer.size()));
-        if (!input.good()) {
-            in_buffer.clear();
-            break;
-        }
         const auto actual_size = input.gcount();
         if (actual_size == 0) {
+            in_buffer.clear();
             break;
         }
 
