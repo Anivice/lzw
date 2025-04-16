@@ -39,7 +39,7 @@ if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
     enable_testing()
 endif ()
 
-add_compile_definitions(LZW_UTIL_VERSION=\"0.0.1\")
+add_compile_definitions(LZW_UTIL_VERSION=\"0.0.2\")
 
 include_directories(src/include)
 
@@ -50,8 +50,8 @@ add_library(huffman OBJECT src/Huffman.cpp src/include/Huffman.h)
 
 add_executable(compress src/compress.cpp)
 add_executable(decompress src/decompress.cpp)
-target_link_libraries(compress PRIVATE log arg_parser lzw)
-target_link_libraries(decompress PRIVATE log arg_parser lzw)
+target_link_libraries(compress PRIVATE log arg_parser lzw huffman)
+target_link_libraries(decompress PRIVATE log arg_parser lzw huffman)
 
 add_executable(bitwise tests/bitwise.cpp)
 target_link_libraries(bitwise log arg_parser lzw)

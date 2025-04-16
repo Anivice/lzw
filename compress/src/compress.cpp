@@ -22,6 +22,7 @@
 #include "argument_parser.h"
 #include "lzw.h"
 #include "utils.h"
+#include "huffman.h"
 #include <fstream>
 #include <thread>
 #include <chrono>
@@ -76,25 +77,27 @@ void compress_on_one_block(std::vector<uint8_t> * in_buffer, std::vector<uint8_t
     compressor.compress();
     const auto data_len = static_cast<uint16_t>(compressed_data.size());
     out_buffer->reserve(BLOCK_SIZE);
+
+    // try huffman
+    // Huffman huffmanCompressor(*in_buffer, compressed_data);
+    // huffmanCompressor.compress();
+    // const auto data_len = static_cast<uint16_t>(compressed_data.size());
+
     if (data_len > BLOCK_SIZE) // expanded
     {
+        // expanded again
         const auto original_data_len = static_cast<uint16_t>(buffer_backup.size());
         out_buffer->push_back(used_plain);
         out_buffer->push_back(((uint8_t*)&original_data_len)[0]);
         out_buffer->push_back(((uint8_t*)&original_data_len)[1]);
         out_buffer->insert(out_buffer->end(), buffer_backup.begin(), buffer_backup.end());
-        if (verbose) {
-            debug::log(debug::to_stderr, debug::debug_log,
-                "Negative compression ratio (",
-                static_cast<double>(static_cast<int64_t>(buffer_backup.size()) - static_cast<int64_t>(data_len)) /
-                    static_cast<double>(buffer_backup.size()) * 100.0,
-                "%), dumping raw data...\n");
-        }
     } else {
         out_buffer->push_back(used_lzw);
         out_buffer->push_back(((uint8_t*)&data_len)[0]);
         out_buffer->push_back(((uint8_t*)&data_len)[1]);
         out_buffer->insert(out_buffer->end(), compressed_data.begin(), compressed_data.end());
+        // out_buffer->push_back(used_huffman);
+        // out_buffer->insert_range(out_buffer->end(), compressed_data);
     }
 }
 

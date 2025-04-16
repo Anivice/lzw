@@ -60,6 +60,7 @@ debug::log_level_t debug::set_log_level(const debug::log_level_t level)
         debug::log_level = debug::L_INFO_FG;
     } else if (env_level == "debug") {
         debug::log_level = debug::L_DEBUG_FG;
+        LOG_DEV << "[DEBUG] Debug output enabled" << std::endl;
     } else if (env_level == "warning") {
         debug::log_level = debug::L_WARNING_FG;
     } else if (env_level == "error") {
