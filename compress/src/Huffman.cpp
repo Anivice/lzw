@@ -473,3 +473,52 @@ void Huffman::decode_using_constructed_pairs()
         current_bit_size = 1;
     }
 }
+
+void Huffman::compress()
+{
+    uint64_t bits = 0;
+    count_data_frequencies();
+    build_binary_tree_based_on_the_frequency_map();
+    walk_through_tree();
+    encode_using_constructed_pairs();
+    auto data = convert_std_string_to_std_vector_from_raw_dump(bits);
+    const auto table = export_table();
+    const auto table_size = static_cast<uint16_t>(table.size());
+
+    output_data_.push_back(((uint8_t*)&table_size)[0]);
+    output_data_.push_back(((uint8_t*)&table_size)[1]);
+    output_data_.insert_range(end(output_data_), table);
+
+    output_data_.push_back(((uint8_t*)&bits)[0]);
+    output_data_.push_back(((uint8_t*)&bits)[1]);
+    output_data_.push_back(((uint8_t*)&bits)[2]);
+    output_data_.push_back(((uint8_t*)&bits)[3]);
+    output_data_.push_back(((uint8_t*)&bits)[4]);
+    output_data_.push_back(((uint8_t*)&bits)[5]);
+    output_data_.push_back(((uint8_t*)&bits)[6]);
+    output_data_.push_back(((uint8_t*)&bits)[7]);
+    output_data_.insert_range(end(output_data_), data);
+}
+
+void Huffman::decompress()
+{
+    uint64_t read_offset = 0;
+    uint16_t table_size = 0;
+    std::memcpy(&table_size, input_data_.data(), sizeof(uint16_t));
+    read_offset += sizeof(uint16_t);
+
+    std::vector<uint8_t> table;
+    table.resize(table_size);
+    std::memcpy(table.data(), input_data_.data() + read_offset, table_size);
+    read_offset += table_size;
+
+    import_table(table);
+
+    uint64_t bits = 0;
+    std::memcpy(&bits, input_data_.data() + read_offset, sizeof(uint64_t));
+    read_offset += sizeof(uint64_t);
+
+    input_data_.erase(begin(input_data_), begin(input_data_) + static_cast<int64_t>(read_offset));
+    convert_input_to_raw_dump(bits);
+    decode_using_constructed_pairs();
+}

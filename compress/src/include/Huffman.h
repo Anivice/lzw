@@ -37,6 +37,19 @@ private:
     std::map < uint8_t, std::string, std::less<> > encoded_pairs;
     std::string raw_dump;
 
+    void count_data_frequencies();
+    void build_binary_tree_based_on_the_frequency_map();
+    void walk_through_tree();
+    void walk_to_next_node(uint64_t, const Node &, const std::string &);
+    void encode_using_constructed_pairs();
+    [[nodiscard]] std::vector < uint8_t > convert_std_string_to_std_vector_from_raw_dump(uint64_t &) const;
+    [[nodiscard]] static uint8_t std_string_to_uint8_t(const std::string &);
+    [[nodiscard]] static std::string uint8_t_to_std_string(uint8_t);
+    [[nodiscard]] std::vector < uint8_t > export_table();
+    void import_table(const std::vector < uint8_t > &);
+    void convert_input_to_raw_dump(uint64_t bits);
+    void decode_using_constructed_pairs();
+
 public:
     Huffman(
         std::vector < uint8_t > & input_data,
@@ -54,18 +67,8 @@ public:
     Huffman(Huffman &&) = delete;
     Huffman & operator=(Huffman &&) = delete;
 
-    void count_data_frequencies();
-    void build_binary_tree_based_on_the_frequency_map();
-    void walk_through_tree();
-    void walk_to_next_node(uint64_t, const Node &, const std::string &);
-    void encode_using_constructed_pairs();
-    [[nodiscard]] std::vector < uint8_t > convert_std_string_to_std_vector_from_raw_dump(uint64_t &) const;
-    [[nodiscard]] static uint8_t std_string_to_uint8_t(const std::string &);
-    [[nodiscard]] static std::string uint8_t_to_std_string(uint8_t);
-    [[nodiscard]] std::vector < uint8_t > export_table();
-    void import_table(const std::vector < uint8_t > &);
-    void convert_input_to_raw_dump(uint64_t bits);
-    void decode_using_constructed_pairs();
+    void compress();
+    void decompress();
 };
 
 #endif //HUFFMAN_H
