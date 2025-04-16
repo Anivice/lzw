@@ -16,8 +16,12 @@ int main()
     huffman.build_binary_tree_based_on_the_frequency_map();
     huffman.walk_through_tree();
     huffman.encode_using_constructed_pairs();
+    uint64_t bits = 0;
+    auto data = huffman.convert_std_string_to_std_vector_from_raw_dump(bits);
     const auto table = huffman.export_table();
 
-    Huffman huffman2(backup_of_input, output);
+    Huffman huffman2(data, output);
     huffman2.import_table(table);
+    huffman2.convert_input_to_raw_dump(bits);
+    huffman2.decode_using_constructed_pairs();
 }

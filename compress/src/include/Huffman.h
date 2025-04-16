@@ -64,6 +64,7 @@ public:
     [[nodiscard]] static std::string uint8_t_to_std_string(uint8_t);
     [[nodiscard]] std::vector < uint8_t > export_table();
     void import_table(const std::vector < uint8_t > &);
+    void convert_input_to_raw_dump(uint64_t bits);
     void decode_using_constructed_pairs();
 };
 

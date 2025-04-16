@@ -421,6 +421,55 @@ void Huffman::import_table(const std::vector<uint8_t> & table_)
     }
 }
 
+void Huffman::convert_input_to_raw_dump(const uint64_t bits)
+{
+    raw_dump.reserve(bits);
+    for (int i = 0; i < bits / 8; i++)
+    {
+        const std::string bit_stream = uint8_t_to_std_string(input_data_[i]);
+        raw_dump.append(bit_stream);
+    }
+
+    if (bits % 8 != 0) {
+        const uint64_t tailing_bits = bits % 8;
+        const uint8_t tailing_byte = input_data_[bits / 8];
+        std::string bit_stream = uint8_t_to_std_string(tailing_byte);
+        bit_stream = bit_stream.substr(bit_stream.size() - tailing_bits, tailing_bits);
+        raw_dump.append(bit_stream);
+    }
+}
+
 void Huffman::decode_using_constructed_pairs()
 {
+    uint64_t offset = 0;
+    uint64_t current_bit_size = 1;
+
+    std::map < std::string, uint8_t > flipped_pairs;
+    for (const auto & [byte, bitStream] : encoded_pairs) {
+        flipped_pairs.emplace(bitStream, byte);
+    }
+
+    auto can_find_reference = [&](const uint64_t bit_offset, const uint64_t bit_size, uint8_t & decoded)->bool
+    {
+        const std::string current_reference = raw_dump.substr(bit_offset, bit_size);
+        const auto reference = flipped_pairs.find(current_reference);
+        if (reference == flipped_pairs.end()) {
+            return false;
+        }
+
+        decoded = (reference->second);
+        return true;
+    };
+
+    while (offset < raw_dump.size())
+    {
+        uint8_t decoded = 0;
+        while (!can_find_reference(offset, current_bit_size, decoded)) {
+            current_bit_size++;
+        }
+
+        output_data_.push_back(decoded);
+        offset += current_bit_size;
+        current_bit_size = 1;
+    }
 }
