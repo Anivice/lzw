@@ -27,6 +27,7 @@
             <excludedPath local="true" path="$PROJECT_DIR$/out/build/x64-release" />
             <excludedPath local="true" path="$PROJECT_DIR$/out" />
             <excludedPath local="true" path="$PROJECT_DIR$/out/build/x86-debug" />
+            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-release-archlinux-coverage" />
             <excludedPath local="true" path="$PROJECT_DIR$/out/build/x86-release" />
             <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-debug-archlinux-coverage" />
             <excludedPath local="true" path="$PROJECT_DIR$/out/build/x64-debug" />

@@ -93,6 +93,14 @@ bool decompress(std::basic_istream<char>& input, std::basic_ostream<char>& outpu
     {
         auto & in_buffer = in_buffers[i];
         uint16_t block_size = 0;
+        uint8_t method = 0;
+
+        input.read(reinterpret_cast<char*>(&method), sizeof(method));
+        if (!input.good()) {
+            in_buffer.clear();
+            break;
+        }
+
         input.read(reinterpret_cast<char*>(&block_size), sizeof(block_size));
         if (!input.good()) {
             in_buffer.clear();
@@ -100,7 +108,7 @@ bool decompress(std::basic_istream<char>& input, std::basic_ostream<char>& outpu
         }
 
         // compressed block
-        if (block_size != 0)
+        if (method == used_lzw)
         {
             in_buffer.resize(BLOCK_SIZE);
             input.read(reinterpret_cast<char*>(in_buffer.data()), block_size);
@@ -112,7 +120,7 @@ bool decompress(std::basic_istream<char>& input, std::basic_ostream<char>& outpu
             in_buffer.resize(actual_size);
         }
         // negative compression ratio
-        else
+        else if (method == 0)
         {
             in_buffer.clear();
             auto & out_buffer = out_buffers[i];
@@ -120,6 +128,9 @@ bool decompress(std::basic_istream<char>& input, std::basic_ostream<char>& outpu
             input.read(reinterpret_cast<char*>(out_buffer.data()), BLOCK_SIZE);
             const auto actual_size = input.gcount();
             out_buffer.resize(actual_size);
+        }
+        else {
+            throw std::runtime_error("Decompression failed, unknown compression method. Corrupted data?");
         }
     }
 

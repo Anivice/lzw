@@ -150,6 +150,6 @@ int main()
         }
     }
 
-    debug::log(debug::to_stderr, debug::debug_log, "All instances passwd\n");
+    debug::log(debug::to_stderr, debug::debug_log, "All instances passed\n");
     return EXIT_SUCCESS;
 }

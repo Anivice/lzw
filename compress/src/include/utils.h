@@ -21,11 +21,18 @@
 #ifndef UTILS_H
 #define UTILS_H
 
+#include <cstdint>
+
 bool is_stdout_pipe();
 void set_binary();
 
 #define LZW_COMPRESSION_BIT_SIZE 9
 #define BLOCK_SIZE (1024 * 16)
+#define HASH_BITS (LZW_COMPRESSION_BIT_SIZE + (LZW_COMPRESSION_BIT_SIZE % 8))
+
+constexpr uint8_t used_lzw = 0xCA;
+constexpr uint8_t used_huffman = 0xED;
+constexpr uint8_t used_plain = 0x00;
 
 constexpr unsigned char magic[] = { 0x1f, 0x9d, LZW_COMPRESSION_BIT_SIZE };
 
