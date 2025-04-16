@@ -6,6 +6,7 @@
 #include <memory>
 #include <iostream>
 #include <unordered_map>
+#include <map>
 
 class Huffman {
 private:
@@ -33,7 +34,7 @@ private:
 
     using full_map_t = std::vector < single_mixed_node >;
     full_map_t full_map;
-    std::unordered_map < uint8_t, std::string > encoded_pairs;
+    std::map < uint8_t, std::string, std::less<> > encoded_pairs;
     std::string raw_dump;
 
 public:
@@ -58,11 +59,10 @@ public:
     void walk_through_tree();
     void walk_to_next_node(uint64_t, const Node &, const std::string &);
     void encode_using_constructed_pairs();
-    [[nodiscard]] std::string export_dumped_data() const {
-        return raw_dump;
-    }
-
-    [[nodiscard]] std::vector < uint8_t > export_table() const;
+    [[nodiscard]] std::vector < uint8_t > convert_std_string_to_std_vector_from_raw_dump(uint64_t &) const;
+    [[nodiscard]] static uint8_t std_string_to_uint8_t(const std::string &);
+    [[nodiscard]] static std::string uint8_t_to_std_string(uint8_t);
+    [[nodiscard]] std::vector < uint8_t > export_table();
     void import_table(const std::vector < uint8_t > &);
     void decode_using_constructed_pairs();
 };
