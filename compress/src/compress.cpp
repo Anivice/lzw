@@ -64,40 +64,120 @@ Arguments::predefined_args_t arguments = {
         .value_required = false,
         .explanation = "Enable verbose mode"
     },
+    Arguments::single_arg_t {
+        .name = "huffman-only",
+        .short_name = 'H',
+        .value_required = false,
+        .explanation = "Disable LZW compression size comparison"
+    },
+    Arguments::single_arg_t {
+        .name = "lzw-only",
+        .short_name = 'L',
+        .value_required = false,
+        .explanation = "Disable Huffman compression size comparison"
+    },
+    Arguments::single_arg_t {
+        .name = "archive",
+        .short_name = 'A',
+        .value_required = false,
+        .explanation = "Disable compression"
+    },
 };
 
 std::atomic < unsigned > thread_count = 1;
 std::atomic < bool > verbose = false;
+std::atomic < uint64_t > lzw_compressed_blocks = 0;
+std::atomic < uint64_t > huffman_compressed_blocks = 0;
+std::atomic < uint64_t > raw_blocks = 0;
+std::atomic < bool > disable_lzw = false;
+std::atomic < bool > disable_huffman = false;
 
 void compress_on_one_block(std::vector<uint8_t> * in_buffer, std::vector<uint8_t> * out_buffer)
 {
-    std::vector<uint8_t> buffer_backup = *in_buffer;
-    std::vector<uint8_t> compressed_data;
-    lzw <LZW_COMPRESSION_BIT_SIZE> compressor(*in_buffer, compressed_data);
-    compressor.compress();
-    const auto data_len = static_cast<uint16_t>(compressed_data.size());
-    out_buffer->reserve(BLOCK_SIZE);
+    std::vector<uint8_t>
+    buffer_lzw = *in_buffer, buffer_lzw_output,
+    buffer_huffman = *in_buffer,
+    buffer_huffman_output,
+    buffer_huffman_lzw_output;
 
-    // try huffman
-    // Huffman huffmanCompressor(*in_buffer, compressed_data);
-    // huffmanCompressor.compress();
-    // const auto data_len = static_cast<uint16_t>(compressed_data.size());
-
-    if (data_len > BLOCK_SIZE) // expanded
+    auto LZW9Compress = [](std::vector<uint8_t> & input, std::vector<uint8_t> & output)->uint16_t
     {
-        // expanded again
-        const auto original_data_len = static_cast<uint16_t>(buffer_backup.size());
+        std::vector<uint8_t> compressed_data_lzw_tmp;
+        lzw <LZW_COMPRESSION_BIT_SIZE> compressor(input, compressed_data_lzw_tmp);
+        compressor.compress();
+        const auto data_len_lzw_tmp = static_cast<uint16_t>(compressed_data_lzw_tmp.size());
+        output.reserve(compressed_data_lzw_tmp.size() + 2 + output.size());
+        output.push_back(((uint8_t*)&data_len_lzw_tmp)[0]);
+        output.push_back(((uint8_t*)&data_len_lzw_tmp)[1]);
+        output.insert_range(end(output), compressed_data_lzw_tmp);
+        const auto data_len_lzw = static_cast<uint16_t>(compressed_data_lzw_tmp.size() + 2);
+        return data_len_lzw;
+    };
+
+    auto HuffmanCompress = [](std::vector<uint8_t> & input, std::vector<uint8_t> & output)->uint16_t {
+        // try huffman
+        Huffman huffmanCompressor(input, output);
+        huffmanCompressor.compress();
+        const auto data_len_huffman = static_cast<uint16_t>(output.size());
+        return data_len_huffman;
+    };
+
+    if (!disable_huffman)
+    {
+        // Huffman Encoding
+        HuffmanCompress(buffer_huffman, buffer_huffman_output);
+        // LZW for huffman in hope that it compress repeated data patterns
+        LZW9Compress(buffer_huffman_output, buffer_huffman_lzw_output);
+    }
+
+    if (!disable_lzw)
+    {
+        // Plain LZW
+        LZW9Compress(buffer_lzw, buffer_lzw_output);
+    }
+
+    uint64_t compressed_data_size
+        = std::min(buffer_huffman_lzw_output.size(), buffer_lzw_output.size());
+
+    uint8_t compression_method =
+        buffer_huffman_lzw_output.size() > buffer_lzw_output.size() ? used_lzw : used_huffman;
+
+    if (disable_lzw && !disable_huffman) {
+        compressed_data_size = buffer_huffman_lzw_output.size();
+        compression_method = used_huffman;
+    } else if (!disable_lzw && disable_huffman) {
+        compressed_data_size = buffer_lzw_output.size();
+        compression_method = used_lzw;
+    } else if (disable_huffman && disable_lzw) {
+        compressed_data_size = UINT64_MAX;
+        compression_method = 0;
+    } // else? default
+
+    if (compressed_data_size >= in_buffer->size()) // data expanded
+    {
         out_buffer->push_back(used_plain);
-        out_buffer->push_back(((uint8_t*)&original_data_len)[0]);
-        out_buffer->push_back(((uint8_t*)&original_data_len)[1]);
-        out_buffer->insert(out_buffer->end(), buffer_backup.begin(), buffer_backup.end());
-    } else {
-        out_buffer->push_back(used_lzw);
-        out_buffer->push_back(((uint8_t*)&data_len)[0]);
-        out_buffer->push_back(((uint8_t*)&data_len)[1]);
-        out_buffer->insert(out_buffer->end(), compressed_data.begin(), compressed_data.end());
-        // out_buffer->push_back(used_huffman);
-        // out_buffer->insert_range(out_buffer->end(), compressed_data);
+        const auto raw_block_size = static_cast<uint16_t>(in_buffer->size());
+        out_buffer->push_back(((uint8_t*)&raw_block_size)[0]);
+        out_buffer->push_back(((uint8_t*)&raw_block_size)[1]);
+        out_buffer->insert_range(end(*out_buffer), *in_buffer);
+        in_buffer->clear();
+        ++raw_blocks;
+    }
+    else // data compressed
+    {
+        out_buffer->push_back(compression_method);
+        if (compression_method == used_lzw) {
+            out_buffer->insert_range(end(*out_buffer), buffer_lzw_output);
+            in_buffer->clear();
+            ++lzw_compressed_blocks;
+        } else if (compression_method == used_huffman) {
+            out_buffer->insert_range(end(*out_buffer), buffer_huffman_lzw_output);
+            in_buffer->clear();
+            ++huffman_compressed_blocks;
+        } else // WTF?
+        {
+            throw std::runtime_error("Invalid compression method, likely internal BUG");
+        }
     }
 }
 
@@ -278,6 +358,12 @@ int main(const int argc, const char** argv)
                 debug::log(debug::to_stderr, debug::info_log, "Compression ratio: ",
                     (static_cast<double>(original_size) - static_cast<double>(compressed_size))
                         / static_cast<double>(original_size) * 100.0, " %\n");
+                debug::log(debug::to_stderr, debug::info_log, "LZW blocks:        ",
+                    lzw_compressed_blocks, "\n");
+                debug::log(debug::to_stderr, debug::info_log, "Huffman blocks:    ",
+                    huffman_compressed_blocks, "\n");
+                debug::log(debug::to_stderr, debug::info_log, "Raw blocks:        ",
+                    raw_blocks, "\n");
             }
         };
 
@@ -295,7 +381,7 @@ int main(const int argc, const char** argv)
         }
 
         if (static_cast<Arguments::args_t>(args).contains("version")) {
-			std::cout << "LZW Utility version " << LZW_UTIL_VERSION << std::endl;
+			std::cout << "Compress Utility version " << LZW_UTIL_VERSION << std::endl;
 			return EXIT_SUCCESS;
 		}
 
@@ -316,7 +402,14 @@ int main(const int argc, const char** argv)
         verbose = static_cast<Arguments::args_t>(args).contains("verbose");
         if (verbose) {
             debug::set_log_level(debug::L_INFO_FG);
-            debug::log(debug::to_stderr, debug::info_log, "Verbose mode enabled\n");
+            debug::log(debug::to_stderr, debug::info_log, "Verbose mode enabled\n\n");
+        }
+
+        disable_lzw = static_cast<Arguments::args_t>(args).contains("huffman-only");
+        disable_huffman = static_cast<Arguments::args_t>(args).contains("lzw-only");
+
+        if (static_cast<Arguments::args_t>(args).contains("archive")) {
+            disable_lzw = disable_huffman = true;
         }
 
         if (static_cast<Arguments::args_t>(args).contains("input"))

@@ -26,6 +26,8 @@
 #include <thread>
 #include <chrono>
 
+#include "huffman.h"
+
 Arguments::predefined_args_t arguments = {
     Arguments::single_arg_t {
         .name = "help",
@@ -67,14 +69,14 @@ Arguments::predefined_args_t arguments = {
 
 std::atomic < unsigned > thread_count = 1;
 std::atomic < bool > verbose = false;
-
-void decompress_on_one_block(std::vector<uint8_t> * in_buffer, std::vector<uint8_t> * out_buffer)
-{
-    lzw <LZW_COMPRESSION_BIT_SIZE> decompressor(*in_buffer, *out_buffer);
-    decompressor.decompress();
-}
-
 std::atomic < uint64_t > processed_size = 0;
+
+#define BUFFER_HEALTH_CHECK(input, in_buffer) {     \
+    if (!(input).good()) {                          \
+        (in_buffer).clear();                        \
+        break;                                      \
+    }                                               \
+}
 
 bool decompress(std::basic_istream<char>& input, std::basic_ostream<char>& output)
 {
@@ -82,7 +84,7 @@ bool decompress(std::basic_istream<char>& input, std::basic_ostream<char>& outpu
         return false;
     }
 
-    std::vector < std::vector<uint8_t> > in_buffers;
+    std::vector < std::pair < uint8_t /* method */, std::vector<uint8_t> > > in_buffers;
     std::vector < std::vector<uint8_t> > out_buffers;
     std::vector < std::thread > threads;
     in_buffers.resize(thread_count);
@@ -92,52 +94,115 @@ bool decompress(std::basic_istream<char>& input, std::basic_ostream<char>& outpu
     for (unsigned i = 0; i < thread_count; ++i)
     {
         auto & in_buffer = in_buffers[i];
-        uint16_t block_size = 0;
         uint8_t method = 0;
 
         input.read(reinterpret_cast<char*>(&method), sizeof(method));
-        if (!input.good()) {
-            in_buffer.clear();
-            break;
+        BUFFER_HEALTH_CHECK(input, in_buffer.second);
+
+        if (method != used_lzw && method != used_huffman && method != 0) {
+            throw std::runtime_error("Unknown compression method, corrupted data?");
         }
 
-        input.read(reinterpret_cast<char*>(&block_size), sizeof(block_size));
-        if (!input.good()) {
-            in_buffer.clear();
-            break;
-        }
-
-        // compressed block
-        if (method == used_lzw)
+        auto read_lzw_block = [&]()->bool
         {
-            in_buffer.resize(BLOCK_SIZE);
-            input.read(reinterpret_cast<char*>(in_buffer.data()), block_size);
-            const auto actual_size = input.gcount();
-            if (actual_size != block_size) {
-                throw std::runtime_error("Decompression failed, corrupted data?");
+            // 1, read LZW block size
+            uint16_t LZW_Block_size = 0;
+            input.read(reinterpret_cast<char*>(&LZW_Block_size), sizeof(uint16_t));
+            if (!input.good()) {
+                in_buffer.second.clear();
+                return false;
             }
 
-            in_buffer.resize(actual_size);
-        }
-        // negative compression ratio
-        else if (method == 0)
+            // 2. prepare LZW buffer space
+            in_buffer.first = used_lzw;
+            in_buffer.second.resize(LZW_Block_size);
+
+            // 3. read and verify data length
+            input.read(reinterpret_cast<char*>(in_buffer.second.data()), LZW_Block_size);
+            if (const auto actual_size = input.gcount(); actual_size != LZW_Block_size) {
+                throw std::runtime_error("Short read for compressed block, corrupted data?");
+            }
+
+            return true;
+        };
+
+        if (method == used_lzw)
         {
-            in_buffer.clear();
-            auto & out_buffer = out_buffers[i];
-            out_buffer.resize(BLOCK_SIZE);
-            input.read(reinterpret_cast<char*>(out_buffer.data()), BLOCK_SIZE);
-            const auto actual_size = input.gcount();
-            out_buffer.resize(actual_size);
+            if (!read_lzw_block()) {
+                break;
+            }
         }
-        else {
-            throw std::runtime_error("Decompression failed, unknown compression method. Corrupted data?");
+        else if (method == used_huffman)
+        {
+            // Huffman encoding is compressed by LZW, again
+            // but offer better size performance than LZW in some cases
+
+            // 1. read as LZW block
+            if (!read_lzw_block()) {
+                break;
+            }
+
+            // 2. modify method
+            in_buffer.first = used_huffman;
+        }
+        else if (method == used_plain) // compression sucks for this data, and original data is actually fucking shorter
+        {
+            // just fucking read it
+            in_buffer.first = used_plain;
+            in_buffer.second.resize(BLOCK_SIZE);
+            uint16_t raw_block_size = 0;
+            input.read(reinterpret_cast<char*>(&raw_block_size), sizeof(uint16_t));
+            input.read(reinterpret_cast<char*>(in_buffer.second.data()), raw_block_size);
+            const auto actual_size = input.gcount();
+            if (actual_size != raw_block_size) {
+                throw std::runtime_error("Short read on block, corrupted data?");
+            }
+            in_buffer.second.resize(actual_size);
+        }
+        else // wtf is going on?
+        {
+            // should never reach this, unless runtime memory corruption
+            throw std::runtime_error("Unknown compression method, corrupted data?");
         }
     }
 
+    auto decompress_lzw_block = [&](std::vector < uint8_t > * in_buffer,
+        std::vector < uint8_t > * out_buffer)->void
+    {
+        lzw <LZW_COMPRESSION_BIT_SIZE> decompressor(*in_buffer, *out_buffer);
+        decompressor.decompress();
+    };
+
+    auto decompress_huffman_lzw_block = [&](std::vector < uint8_t > * in_buffer,
+    std::vector < uint8_t > * out_buffer)->void
+    {
+        std::vector < uint8_t > lzw_decompressed;
+        decompress_lzw_block(in_buffer, &lzw_decompressed);
+        Huffman HuffmanDecompressor(lzw_decompressed, *out_buffer);
+        HuffmanDecompressor.decompress();
+    };
+
+    auto raw_copy_over = [&](std::vector < uint8_t > * in_buffer,
+    std::vector < uint8_t > * out_buffer)->void
+    {
+        out_buffer->insert_range(end(*out_buffer), *in_buffer);
+        in_buffer->clear();
+    };
+
     // create workers
-    for (unsigned i = 0; i < thread_count; ++i) {
-        if (!in_buffers[i].empty()) {
-            threads.emplace_back(decompress_on_one_block, &in_buffers[i], &out_buffers[i]);
+    for (unsigned i = 0; i < thread_count; ++i)
+    {
+        if (!in_buffers[i].second.empty())
+        {
+            if (in_buffers[i].first == used_lzw) {
+                threads.emplace_back(decompress_lzw_block, &in_buffers[i].second, &out_buffers[i]);
+            } else if (in_buffers[i].first == used_huffman) {
+                threads.emplace_back(decompress_huffman_lzw_block, &in_buffers[i].second, &out_buffers[i]);
+            } else if (in_buffers[i].first == used_plain) {
+                threads.emplace_back(raw_copy_over, &in_buffers[i].second, &out_buffers[i]);
+            } else {
+                throw std::runtime_error("Unknown compression method, corrupted data?");
+            }
         }
     }
 
@@ -287,7 +352,7 @@ int main(const int argc, const char** argv)
         }
 
         if (static_cast<Arguments::args_t>(args).contains("version")) {
-			std::cout << "LZW Utility version " << LZW_UTIL_VERSION << std::endl;
+			std::cout << "Decompress Utility version " << LZW_UTIL_VERSION << std::endl;
 			return EXIT_SUCCESS;
 		}
 
@@ -308,7 +373,7 @@ int main(const int argc, const char** argv)
         verbose = static_cast<Arguments::args_t>(args).contains("verbose");
         if (verbose) {
             debug::set_log_level(debug::L_INFO_FG);
-            debug::log(debug::to_stderr, debug::info_log, "Verbose mode enabled\n");
+            debug::log(debug::to_stderr, debug::info_log, "Verbose mode enabled\n\n");
         }
 
         if (static_cast<Arguments::args_t>(args).contains("input"))

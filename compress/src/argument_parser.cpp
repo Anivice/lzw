@@ -112,7 +112,10 @@ Arguments::Arguments(const int argc, const char* argv[], predefined_args_t prede
         else if (this_arg[0] == '-' && this_arg.size() != 1)
         {
             // Handle argument with key
-            replace_all(this_arg, "-", ""); // Remove leading '-'
+            // Remove leading '-'
+            while (!this_arg.empty() && this_arg[0] == '-') {
+                this_arg.erase(this_arg.begin());
+            }
 
             if (this_arg.find('=') != std::string::npos)
             {

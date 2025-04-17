@@ -27,7 +27,7 @@ bool is_stdout_pipe();
 void set_binary();
 
 #define LZW_COMPRESSION_BIT_SIZE 9
-#define BLOCK_SIZE (1024 * 16)
+#define BLOCK_SIZE (1024 * 64 - 1) /* Max 16bit data len */
 #define HASH_BITS (LZW_COMPRESSION_BIT_SIZE + (LZW_COMPRESSION_BIT_SIZE % 8))
 
 constexpr uint8_t used_lzw = 0xCA;
