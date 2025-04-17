@@ -45,8 +45,13 @@ def lzw_decompress(compressed_data_decompression):
 
     # Iterate over the compressed data to reconstruct the string
     for code in compressed_data_decompression:
+        print(f"=> {code}")
+        print(f"    -- Current string: `{current_string}`")
+        print(f"    -- Check dictionary")
         if code in dictionary:
+            print(f"        -- Code `{code}` is in dictionary")
             entry = dictionary[code]
+            print(f"        -- Decode `{code}` to `{entry}` from the dictionary")
         elif code == dict_size:
             entry = current_string + current_string[0]
         decompressed_data.append(entry)

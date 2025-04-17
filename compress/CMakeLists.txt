@@ -45,7 +45,7 @@ include_directories(src/include)
 
 add_library(log OBJECT src/log.cpp src/include/log.hpp)
 add_library(arg_parser OBJECT src/argument_parser.cpp src/include/argument_parser.h)
-add_library(lzw OBJECT src/lzw.cpp src/include/lzw.h src/include/utils.h src/utils.cpp)
+add_library(lzw OBJECT src/include/lzw.h src/include/utils.h src/utils.cpp)
 add_library(huffman OBJECT src/Huffman.cpp src/include/Huffman.h)
 
 add_executable(compress src/compress.cpp)
