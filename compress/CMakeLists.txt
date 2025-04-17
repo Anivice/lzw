@@ -39,7 +39,7 @@ if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
     enable_testing()
 endif ()
 
-add_compile_definitions(LZW_UTIL_VERSION=\"0.0.2\")
+add_compile_definitions(LZW_UTIL_VERSION=\"0.1.0\")
 
 include_directories(src/include)
 
