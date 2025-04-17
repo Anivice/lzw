@@ -27,13 +27,13 @@ bool is_stdout_pipe();
 void set_binary();
 
 #define LZW_COMPRESSION_BIT_SIZE 9
-#define BLOCK_SIZE (1024 * 64 - 1) /* Max 16bit data len */
+extern uint64_t BLOCK_SIZE;
 #define HASH_BITS (LZW_COMPRESSION_BIT_SIZE + (LZW_COMPRESSION_BIT_SIZE % 8))
+#define BLOCK_SIZE_MAX (32767)
 
 constexpr uint8_t used_lzw = 0xCA;
 constexpr uint8_t used_huffman = 0xED;
 constexpr uint8_t used_plain = 0x00;
-
 constexpr unsigned char magic[] = { 0x1f, 0x9d, LZW_COMPRESSION_BIT_SIZE };
 
 #endif //UTILS_H

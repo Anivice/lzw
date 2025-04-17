@@ -5,7 +5,6 @@
 #include <sstream>
 #include <bitset>
 #include <ranges>
-
 #include "numeric.h"
 
 void Huffman::count_data_frequencies()
@@ -45,7 +44,8 @@ void Huffman::build_binary_tree_based_on_the_frequency_map()
     auto construct_two_branches_with_one_root_based_on_provided_two_data = [&](
         Node & parent,
         single_mixed_node& data1,
-        single_mixed_node& data2)->void
+        single_mixed_node& data2,
+        const uint64_t child_depth)->void
     {
         uint64_t freq_combined = 0;
         if (data1.node == nullptr)
@@ -53,7 +53,6 @@ void Huffman::build_binary_tree_based_on_the_frequency_map()
             Node node;
             node.original_uint8_code = data1.code;
             node.frequency = data1.frequency;
-            node.am_i_valid = true;
 
             parent.left = std::make_unique<Node>(std::move(node));
             freq_combined += data1.frequency;
@@ -67,7 +66,6 @@ void Huffman::build_binary_tree_based_on_the_frequency_map()
             Node node;
             node.original_uint8_code = data2.code;
             node.frequency = data2.frequency;
-            node.am_i_valid = true;
             parent.right = std::make_unique<Node>(std::move(node));
             freq_combined += data2.frequency;
         } else {
@@ -77,33 +75,101 @@ void Huffman::build_binary_tree_based_on_the_frequency_map()
 
         parent.original_uint8_code = 0;
         parent.frequency = freq_combined;
-        parent.am_i_valid = true;
+        parent.depth = child_depth + 1;
     };
 
     auto construct_dangling_nodes_based_on_full_map = [&](
-        const uint64_t max_freq)->void
+        uint64_t max_freq)->uint64_t
     {
         if (full_map.empty()) {
-            return;
+            return 0;
+        }
+
+        uint64_t lowest_possible_depth = UINT64_MAX;
+        // find out the lowest depth and the second-lowest depth
+        // use map to remove duplication automatically
+        std::vector < uint64_t > depths;
+        for (const auto & node : full_map)
+        {
+            if (node.node != nullptr) {
+                if (node.node->depth < lowest_possible_depth) {
+                    lowest_possible_depth = node.node->depth;
+                }
+
+                depths.emplace_back(node.node->depth);
+            } else {
+                lowest_possible_depth = 0;
+                depths.emplace_back(0);
+            }
+        }
+
+        std::ranges::sort(depths, [](const uint64_t a, const uint64_t b) {
+            return a < b;
+        });
+
+        bool lowest_possible_depth_found = false;
+        for (const auto & depth : depths) {
+            if (depth > lowest_possible_depth) {
+                lowest_possible_depth = depth + 1; // I don't fucking care if it's the third one, it already surpasses the second
+                lowest_possible_depth_found = true;
+                break;
+            }
+        }
+
+        if (!lowest_possible_depth_found) {
+            lowest_possible_depth += 1;
         }
 
         std::vector < single_mixed_node * > acceptable_map;
         acceptable_map.reserve(full_map.size());
         std::vector < std::unique_ptr < Node > > returned_nodes;
-        auto it_full = full_map.end() - 1;
-        bool found = false;
-        for (;it_full > full_map.begin(); --it_full)
-        {
-            if (it_full->frequency <= max_freq) {
-                acceptable_map.emplace_back(&*it_full);
-            } else {
-                found = true;
-                break;
-            }
-        }
 
-        if (it_full == full_map.begin() && !found) {
-            acceptable_map.emplace_back(&*it_full);
+        auto assign_acceptable_nodes = [&](single_mixed_node & it_full)->void
+        {
+            uint64_t current_depth = 0;
+            if (it_full.node != nullptr) {
+                current_depth = it_full.node->depth;
+            }
+
+            // merge the lowest depth possible
+            if (current_depth < lowest_possible_depth)
+            {
+                if (!it_full.am_i_selected) {
+                    acceptable_map.emplace_back(&it_full);
+                    it_full.am_i_selected = true;
+                }
+            }
+        };
+
+        // select least frequencies of similar depths
+        uint64_t last_selected_map_size = 0;
+        while (acceptable_map.size() < 2)
+        {
+            auto it_full = full_map.end() - 1;
+            bool max_freq_reached = false;
+            for (;it_full > full_map.begin(); --it_full)
+            {
+                if (it_full->frequency <= max_freq) // least frequency
+                {
+                    assign_acceptable_nodes(*it_full);
+                } else {
+                    max_freq_reached = true;
+                    break;
+                }
+            }
+
+            if (it_full == full_map.begin() && !max_freq_reached) {
+                // !max_freq_reached but it'a already at the beginning
+                assign_acceptable_nodes(*it_full);
+            }
+
+            if (last_selected_map_size == acceptable_map.size())
+            {
+                lowest_possible_depth++;
+                max_freq++;
+            }
+
+            last_selected_map_size = acceptable_map.size();
         }
 
         auto it = acceptable_map.begin();
@@ -113,9 +179,18 @@ void Huffman::build_binary_tree_based_on_the_frequency_map()
                 break;
             }
 
+            uint64_t preceding_depth = 0;
+            if ((*it)->node != nullptr) {
+                preceding_depth += (*it)->node->depth;
+            }
+
+            if ((*(it + 1))->node != nullptr) {
+                preceding_depth += (*(it + 1))->node->depth;
+            }
+
             returned_nodes.emplace_back(std::make_unique<Node>());
             construct_two_branches_with_one_root_based_on_provided_two_data(
-                *returned_nodes.back(), **it, **(it +1));
+                *returned_nodes.back(), **it, **(it +1), preceding_depth);
             (*it)->am_i_valid = false;
             (*(it + 1))->am_i_valid = false;
             it += 2;
@@ -144,6 +219,13 @@ void Huffman::build_binary_tree_based_on_the_frequency_map()
             {
                 return a.frequency > b.frequency;
             });
+
+        // reset selection bit
+        for (auto & node : full_map) {
+            node.am_i_selected = false;
+        }
+
+        return max_freq;
     };
 
     auto find_second_least_in_map = [&]()->uint64_t
@@ -172,13 +254,28 @@ void Huffman::build_binary_tree_based_on_the_frequency_map()
     uint64_t freq_threshold = find_second_least_in_map();
     while (full_map.size() != 1)
     {
-        construct_dangling_nodes_based_on_full_map(freq_threshold);
-        freq_threshold = find_second_least_in_map();
+        const auto returned_max_freq = construct_dangling_nodes_based_on_full_map(freq_threshold);
+        const auto freq_threshold_new = find_second_least_in_map();
+        freq_threshold = std::max(freq_threshold_new, returned_max_freq);
     }
 }
 
 void Huffman::walk_through_tree()
 {
+    if (full_map.empty()) { // nothing
+        return;
+    }
+
+    if (full_map.front().node == nullptr) // one node and one node only
+    {
+        if (full_map.size() != 1) {
+            throw std::runtime_error("Huffman doesn't have a single node, possibly internal bug");
+        }
+
+        encoded_pairs.emplace(full_map.front().code, "1");
+        return;
+    }
+
     walk_to_next_node(0, *full_map.front().node, "");
 }
 
@@ -296,7 +393,7 @@ std::vector<uint8_t> Huffman::export_table()
     for (const auto & [byte, bitStream] : encoded_pairs)
     {
         if (bitStream.size() > 0xF /* Worst case for a 64 KB long data, and our utility is using 16 KB */) {
-            throw std::invalid_argument("Bitstream too long, must be less than 16 bits (WTF data did you provide???)");
+            throw std::invalid_argument(R"(Bitstream too long, must be less than 16 bits (WTF data did you provide???))");
         }
         const auto bitSize = static_cast<uint8_t>(bitStream.size());
         table_entry_and_key_size.emplace(byte, bitSize);
@@ -320,9 +417,9 @@ std::vector<uint8_t> Huffman::export_table()
 
     // [ (256 * 4 / 8 = 128 Bytes) ] [ Encoding Byte Stream ]
     // 1. push each byte stream encoding length (16 bits max)
-    ret.insert_range(ret.end(), byteStreamLengthVec);
+    ret.insert(ret.end(), begin(byteStreamLengthVec), end(byteStreamLengthVec));
     // 2. push encoding byte stream data
-    ret.insert_range(ret.end(), val_vec_entry);
+    ret.insert(ret.end(), begin(val_vec_entry), end(val_vec_entry));
     return ret;
 }
 
@@ -450,7 +547,7 @@ void Huffman::compress()
 
     output_data_.push_back(((uint8_t*)&table_size)[0]);
     output_data_.push_back(((uint8_t*)&table_size)[1]);
-    output_data_.insert_range(end(output_data_), table);
+    output_data_.insert(end(output_data_), begin(table), end(table));
 
     output_data_.push_back(((uint8_t*)&bits)[0]);
     output_data_.push_back(((uint8_t*)&bits)[1]);
@@ -460,7 +557,7 @@ void Huffman::compress()
     output_data_.push_back(((uint8_t*)&bits)[5]);
     output_data_.push_back(((uint8_t*)&bits)[6]);
     output_data_.push_back(((uint8_t*)&bits)[7]);
-    output_data_.insert_range(end(output_data_), data);
+    output_data_.insert(end(output_data_), begin(data), end(data));
 }
 
 void Huffman::decompress()

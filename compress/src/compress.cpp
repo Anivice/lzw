@@ -22,10 +22,13 @@
 #include "argument_parser.h"
 #include "lzw.h"
 #include "utils.h"
-#include "huffman.h"
+#include "Huffman.h"
 #include <fstream>
 #include <thread>
 #include <chrono>
+#include <filesystem>
+
+namespace fs = std::filesystem;
 
 Arguments::predefined_args_t arguments = {
     Arguments::single_arg_t {
@@ -82,6 +85,12 @@ Arguments::predefined_args_t arguments = {
         .value_required = false,
         .explanation = "Disable compression"
     },
+    Arguments::single_arg_t {
+        .name = "block-size",
+        .short_name = 'B',
+        .value_required = true,
+        .explanation = "Set block size (in bytes, default 16384 (16KB), 32767 Max (32KB - 1))"
+    },
 };
 
 std::atomic < unsigned > thread_count = 1;
@@ -109,7 +118,7 @@ void compress_on_one_block(std::vector<uint8_t> * in_buffer, std::vector<uint8_t
         output.reserve(compressed_data_lzw_tmp.size() + 2 + output.size());
         output.push_back(((uint8_t*)&data_len_lzw_tmp)[0]);
         output.push_back(((uint8_t*)&data_len_lzw_tmp)[1]);
-        output.insert_range(end(output), compressed_data_lzw_tmp);
+        output.insert(end(output), begin(compressed_data_lzw_tmp), end(compressed_data_lzw_tmp));
         const auto data_len_lzw = static_cast<uint16_t>(compressed_data_lzw_tmp.size() + 2);
         return data_len_lzw;
     };
@@ -159,7 +168,7 @@ void compress_on_one_block(std::vector<uint8_t> * in_buffer, std::vector<uint8_t
         const auto raw_block_size = static_cast<uint16_t>(in_buffer->size());
         out_buffer->push_back(((uint8_t*)&raw_block_size)[0]);
         out_buffer->push_back(((uint8_t*)&raw_block_size)[1]);
-        out_buffer->insert_range(end(*out_buffer), *in_buffer);
+        out_buffer->insert(end(*out_buffer), begin(*in_buffer), end(*in_buffer));
         in_buffer->clear();
         ++raw_blocks;
     }
@@ -167,11 +176,13 @@ void compress_on_one_block(std::vector<uint8_t> * in_buffer, std::vector<uint8_t
     {
         out_buffer->push_back(compression_method);
         if (compression_method == used_lzw) {
-            out_buffer->insert_range(end(*out_buffer), buffer_lzw_output);
+            out_buffer->insert(end(*out_buffer),
+                begin(buffer_lzw_output), end(buffer_lzw_output));
             in_buffer->clear();
             ++lzw_compressed_blocks;
         } else if (compression_method == used_huffman) {
-            out_buffer->insert_range(end(*out_buffer), buffer_huffman_lzw_output);
+            out_buffer->insert(end(*out_buffer),
+                begin(buffer_huffman_lzw_output), end(buffer_huffman_lzw_output));
             in_buffer->clear();
             ++huffman_compressed_blocks;
         } else // WTF?
@@ -236,14 +247,6 @@ bool compress(std::basic_istream<char>& input, std::basic_ostream<char>& output)
         }
     }
 
-    if (verbose && original_size > 0) {
-        debug::log(debug::to_stderr, debug::debug_log, "Original size:     ", original_size * 8, " Bits\n");
-        debug::log(debug::to_stderr, debug::debug_log, "Compressed size:   ", compressed_size * 8, " Bits\n");
-        debug::log(debug::to_stderr, debug::debug_log, "Compression ratio: ",
-            (static_cast<double>(original_size) - static_cast<double>(compressed_size))
-                / static_cast<double>(original_size) * 100.0, " %\n");
-    }
-
     return true;
 }
 
@@ -256,6 +259,7 @@ void compress_from_stdin()
     // Set stdin and stdout to binary mode
     set_binary();
     std::cout.write((char*)(magic), sizeof(magic));
+    std::cout.write((char*)(&BLOCK_SIZE), sizeof(BLOCK_SIZE));
     while (std::cin.good()) {
         if (!compress(std::cin, std::cout)) {
             break;
@@ -267,6 +271,15 @@ void compress_from_stdin()
 
 void compress_file(const std::string& in, const std::string& out)
 {
+    fs::path input_path(in);
+    uintmax_t input_size;
+    try {
+        // Get the file size
+        input_size = fs::file_size(input_path);
+    } catch (const fs::filesystem_error&) {
+        throw;
+    }
+
     std::ifstream input_file(in, std::ios::binary);
     std::ofstream output_file(out, std::ios::binary);
 
@@ -281,7 +294,10 @@ void compress_file(const std::string& in, const std::string& out)
     const auto before = std::chrono::system_clock::now();
 
     output_file.write((char*)(magic), sizeof(magic));
-    while (input_file.good()) {
+    output_file.write((char*)(&BLOCK_SIZE), sizeof(BLOCK_SIZE));
+
+    while (input_file.good())
+    {
         if (!compress(input_file, output_file)) {
             break;
         }
@@ -291,15 +307,21 @@ void compress_file(const std::string& in, const std::string& out)
             verbose && original_size > 0 && duration > 0)
         {
             std::stringstream ss;
-            if (const auto bps = original_size * 8 / duration * 1000;
-                bps > 1024 * 1024)
+            const auto bps = original_size * 8 / duration * 1000;
+            uint64_t seconds_left = (input_size - original_size) / (bps / 8);
+
+            if (bps > 1024 * 1024)
             {
-                ss << original_size * 8 << " bits processed, speed " << bps / 1024 / 1024 << " Mbps";
+                ss << original_size * 8 << " bits processed, speed " << bps / 1024 / 1024 << " Mbps ";
             } else if (bps > 10 * 1024) {
-                ss << original_size * 8 << " bits processed, speed " << bps / 1024 << " Kbps";
+                ss << original_size * 8 << " bits processed, speed " << bps / 1024 << " Kbps ";
             } else {
-                ss << original_size * 8 << " bits processed, speed " << bps << " bps";
+                ss << original_size * 8 << " bits processed, speed " << bps << " bps ";
             }
+
+            ss  << std::fixed << std::setprecision(2)
+                << static_cast<long double>(original_size) / static_cast<long double>(input_size) * 100
+                << " % [ETA=" << seconds_left << "s]";
 
             debug::log(debug::to_stderr,
                 debug::cursor_off,
@@ -355,7 +377,7 @@ int main(const int argc, const char** argv)
             if (verbose && original_size > 0) {
                 debug::log(debug::to_stderr, debug::info_log, "Original size:     ", original_size * 8, " Bits\n");
                 debug::log(debug::to_stderr, debug::info_log, "Compressed size:   ", compressed_size * 8, " Bits\n");
-                debug::log(debug::to_stderr, debug::info_log, "Compression ratio: ",
+                debug::log(debug::to_stderr, debug::info_log, "Compression ratio: ", std::fixed, std::setprecision(2),
                     (static_cast<double>(original_size) - static_cast<double>(compressed_size))
                         / static_cast<double>(original_size) * 100.0, " %\n");
                 debug::log(debug::to_stderr, debug::info_log, "LZW blocks:        ",
@@ -410,6 +432,16 @@ int main(const int argc, const char** argv)
 
         if (static_cast<Arguments::args_t>(args).contains("archive")) {
             disable_lzw = disable_huffman = true;
+        }
+
+        if (static_cast<Arguments::args_t>(args).contains("block-size"))
+        {
+            const auto block_size_literal =
+                static_cast<Arguments::args_t>(args).at("block-size").back();
+            BLOCK_SIZE = std::strtoul(block_size_literal.c_str(), nullptr, 10);
+            if (BLOCK_SIZE > BLOCK_SIZE_MAX) {
+                throw std::runtime_error("Block size too large, maximum " + std::to_string(BLOCK_SIZE_MAX) + " Bytes\n");
+            }
         }
 
         if (static_cast<Arguments::args_t>(args).contains("input"))

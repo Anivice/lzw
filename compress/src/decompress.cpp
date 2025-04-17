@@ -25,8 +25,10 @@
 #include <fstream>
 #include <thread>
 #include <chrono>
+#include "Huffman.h"
+#include <filesystem>
 
-#include "huffman.h"
+namespace fs = std::filesystem;
 
 Arguments::predefined_args_t arguments = {
     Arguments::single_arg_t {
@@ -169,6 +171,7 @@ bool decompress(std::basic_istream<char>& input, std::basic_ostream<char>& outpu
     auto decompress_lzw_block = [&](std::vector < uint8_t > * in_buffer,
         std::vector < uint8_t > * out_buffer)->void
     {
+        processed_size += in_buffer->size();
         lzw <LZW_COMPRESSION_BIT_SIZE> decompressor(*in_buffer, *out_buffer);
         decompressor.decompress();
     };
@@ -176,6 +179,7 @@ bool decompress(std::basic_istream<char>& input, std::basic_ostream<char>& outpu
     auto decompress_huffman_lzw_block = [&](std::vector < uint8_t > * in_buffer,
     std::vector < uint8_t > * out_buffer)->void
     {
+        processed_size += in_buffer->size();
         std::vector < uint8_t > lzw_decompressed;
         decompress_lzw_block(in_buffer, &lzw_decompressed);
         Huffman HuffmanDecompressor(lzw_decompressed, *out_buffer);
@@ -185,7 +189,8 @@ bool decompress(std::basic_istream<char>& input, std::basic_ostream<char>& outpu
     auto raw_copy_over = [&](std::vector < uint8_t > * in_buffer,
     std::vector < uint8_t > * out_buffer)->void
     {
-        out_buffer->insert_range(end(*out_buffer), *in_buffer);
+        processed_size += in_buffer->size();
+        out_buffer->insert(end(*out_buffer), begin(*in_buffer), end(*in_buffer));
         in_buffer->clear();
     };
 
@@ -217,7 +222,6 @@ bool decompress(std::basic_istream<char>& input, std::basic_ostream<char>& outpu
     for (unsigned i = 0; i < thread_count; ++i) {
         auto & out_buffer = out_buffers[i];
         if (!out_buffer.empty()) {
-            processed_size += out_buffer.size();
             output.write(reinterpret_cast<char*>(out_buffer.data()), static_cast<std::streamsize>(out_buffer.size()));
         }
     }
@@ -239,6 +243,11 @@ void decompress_from_stdin()
         throw std::runtime_error("Decompression failed due to invalid magick number");
     }
 
+    std::cin.read((char*)(&BLOCK_SIZE), sizeof(BLOCK_SIZE));
+    if (BLOCK_SIZE > BLOCK_SIZE_MAX) {
+        throw std::runtime_error("Decompression failed due to invalid block size (decompression bomb?)");
+    }
+
     while (std::cin.good())
     {
         if (!decompress(std::cin, std::cout)) {
@@ -249,6 +258,15 @@ void decompress_from_stdin()
 
 void decompress_file(const std::string& in, const std::string& out)
 {
+    fs::path input_path(in);
+    uintmax_t input_size;
+    try {
+        // Get the file size
+        input_size = fs::file_size(input_path);
+    } catch (const fs::filesystem_error&) {
+        throw;
+    }
+
     std::ifstream input_file(in, std::ios::binary);
     std::ofstream output_file(out, std::ios::binary);
 
@@ -266,6 +284,11 @@ void decompress_file(const std::string& in, const std::string& out)
         throw std::runtime_error("Decompression failed due to invalid magick number");
     }
 
+    input_file.read((char*)(&BLOCK_SIZE), sizeof(BLOCK_SIZE));
+    if (BLOCK_SIZE > BLOCK_SIZE_MAX) {
+        throw std::runtime_error("Decompression failed due to invalid block size (decompression bomb?)");
+    }
+
     const auto before = std::chrono::system_clock::now();
 
     while (input_file)
@@ -279,15 +302,21 @@ void decompress_file(const std::string& in, const std::string& out)
             verbose && processed_size > 0 && duration > 0)
         {
             std::stringstream ss;
-            if (const auto bps = processed_size * 8 / duration * 1000;
-                bps > 1024 * 1024)
+            const auto bps = processed_size * 8 / duration * 1000;
+            uint64_t seconds_left = (input_size - processed_size) / (bps / 8);
+
+            if (bps > 1024 * 1024)
             {
-                ss << processed_size * 8 << " bits processed, speed " << bps / 1024 / 1024 << " Mbps";
+                ss << processed_size * 8 << " bits processed, speed " << bps / 1024 / 1024 << " Mbps ";
             } else if (bps > 10 * 1024) {
-                ss << processed_size * 8 << " bits processed, speed " << bps / 1024 << " Kbps";
+                ss << processed_size * 8 << " bits processed, speed " << bps / 1024 << " Kbps ";
             } else {
-                ss << processed_size * 8 << " bits processed, speed " << bps << " bps";
+                ss << processed_size * 8 << " bits processed, speed " << bps << " bps ";
             }
+
+            ss  << std::fixed << std::setprecision(2)
+                << static_cast<long double>(processed_size) / static_cast<long double>(input_size) * 100
+                << " % [ETA=" << seconds_left << "s]";
 
             debug::log(debug::to_stderr,
                 debug::cursor_off,

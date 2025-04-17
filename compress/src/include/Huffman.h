@@ -16,13 +16,11 @@ private:
 
     struct Node
     {
-        std::vector < uint8_t > codes;
         uint8_t original_uint8_code{};
         uint64_t frequency{};
-        bool am_i_valid = false;
-
         std::unique_ptr<Node> left;
         std::unique_ptr<Node> right;
+        uint64_t depth = 0;
     };
 
     struct single_mixed_node {
@@ -30,6 +28,7 @@ private:
         uint64_t frequency{};
         std::unique_ptr<Node> node;
         bool am_i_valid = false;
+        bool am_i_selected = false;
     };
 
     using full_map_t = std::vector < single_mixed_node >;

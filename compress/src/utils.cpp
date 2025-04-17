@@ -70,3 +70,5 @@ void set_binary()
     setvbuf(stdin, NULL, _IONBF, 0);
 #endif
 }
+
+uint64_t BLOCK_SIZE =  (16 * 1024);
