@@ -29,6 +29,7 @@
 
 #include <cstdio>
 #include "log.hpp"
+#include <sstream>
 
 bool is_stdout_pipe()
 {
@@ -45,8 +46,8 @@ void set_binary()
 #ifdef WIN32
     _setmode(_fileno(stdin), _O_BINARY);
     _setmode(_fileno(stdout), _O_BINARY);
-    setvbuf(stdin, NULL, _IONBF, 0);
-    setvbuf(stdout, NULL, _IONBF, 0);
+    setvbuf(stdin, nullptr, _IONBF, 0);
+    setvbuf(stdout, nullptr, _IONBF, 0);
     DWORD originalMode { };
 
 # ifdef __DEBUG__
@@ -66,9 +67,28 @@ void set_binary()
         }
     }
 #else
-    setvbuf(stdout, NULL, _IONBF, 0);
-    setvbuf(stdin, NULL, _IONBF, 0);
+    setvbuf(stdout, nullptr, _IONBF, 0);
+    setvbuf(stdin, nullptr, _IONBF, 0);
 #endif
 }
 
 uint64_t BLOCK_SIZE =  (16 * 1024);
+
+std::string seconds_to_human_readable_dates(const uint64_t seconds)
+{
+    constexpr uint64_t seconds_in_a_day = 24 * 60 * 60;
+    constexpr uint64_t seconds_in_a_hour = 60 * 60;
+    constexpr uint64_t seconds_in_a_minute = 60;
+    const uint64_t days = seconds / seconds_in_a_day;
+    const uint64_t hours = seconds / seconds_in_a_hour;
+    const uint64_t minutes = seconds / seconds_in_a_minute;
+    const uint64_t actual_seconds = seconds % seconds_in_a_minute;
+
+    std::stringstream ss;
+    ss  << (days == 0 ? "" : std::to_string(days) + "d")
+        << (hours == 0 ? "" : std::to_string(hours) + "h")
+        << (minutes == 0 ? "" : std::to_string(minutes) + "m")
+        << (actual_seconds == 0 ? "0s" : std::to_string(actual_seconds) + "s");
+
+    return ss.str();
+}

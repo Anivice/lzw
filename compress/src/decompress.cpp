@@ -259,10 +259,10 @@ void decompress_from_stdin()
 void decompress_file(const std::string& in, const std::string& out)
 {
     fs::path input_path(in);
-    uintmax_t input_size;
+    uintmax_t original_size;
     try {
         // Get the file size
-        input_size = fs::file_size(input_path);
+        original_size = fs::file_size(input_path);
     } catch (const fs::filesystem_error&) {
         throw;
     }
@@ -303,7 +303,8 @@ void decompress_file(const std::string& in, const std::string& out)
         {
             std::stringstream ss;
             const auto bps = processed_size * 8 / duration * 1000;
-            uint64_t seconds_left = (input_size - processed_size) / (bps / 8);
+            const uint64_t bytes_left = (original_size > processed_size ? original_size - processed_size : 0);
+            const uint64_t seconds_left = bytes_left / (bps / 8);
 
             if (bps > 1024 * 1024)
             {
@@ -315,8 +316,10 @@ void decompress_file(const std::string& in, const std::string& out)
             }
 
             ss  << std::fixed << std::setprecision(2)
-                << static_cast<long double>(processed_size) / static_cast<long double>(input_size) * 100
-                << " % [ETA=" << seconds_left << "s]";
+                << (processed_size < original_size ?
+                    static_cast<long double>(processed_size) / static_cast<long double>(original_size) * 100 :
+                    100.00f)
+                << " % [ETA=" << seconds_to_human_readable_dates(seconds_left) << "]";
 
             debug::log(debug::to_stderr,
                 debug::cursor_off,

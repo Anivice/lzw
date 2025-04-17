@@ -1,4 +1,5 @@
 #include "Huffman.h"
+#include "log.hpp"
 
 int main()
 {
@@ -8,24 +9,15 @@ int main()
         'A', 'B', 'C', 'D', 'E', 'F', 'G',                'H',
              'B', 'C',
                                                                 'S', 'Q',  'P', 'R' };
+    debug::set_log_level(debug::L_DEBUG_FG);
+    debug::log(debug::to_stderr, debug::debug_log, "Data before encoding: ", input, "\n");
+
     std::vector < uint8_t > output, output2;
     Huffman huffman(input, output);
     huffman.compress();
+    debug::log(debug::to_stderr, debug::debug_log, "Data after encoding: ", output, "\n");
 
     Huffman huffman2(output, output2);
     huffman2.decompress();
-
-    // Huffman huffman(input, output);
-    // huffman.count_data_frequencies();
-    // huffman.build_binary_tree_based_on_the_frequency_map();
-    // huffman.walk_through_tree();
-    // huffman.encode_using_constructed_pairs();
-    // uint64_t bits = 0;
-    // auto data = huffman.convert_std_string_to_std_vector_from_raw_dump(bits);
-    // const auto table = huffman.export_table();
-    //
-    // Huffman huffman2(data, output);
-    // huffman2.import_table(table);
-    // huffman2.convert_input_to_raw_dump(bits);
-    // huffman2.decode_using_constructed_pairs();
+    debug::log(debug::to_stderr, debug::debug_log, "Data after decoding: ", output2, "\n");
 }

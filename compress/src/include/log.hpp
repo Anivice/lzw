@@ -178,7 +178,12 @@ namespace debug {
     void _log(const ParamType& param, const Args&... args);
 
     /////////////////////////////////////////////////////////////////////////////////////////////
-
+    extern std::string str_true;
+    extern std::string str_false;
+    enum log_level_t { L_DEBUG_FG = 0, L_INFO_FG, L_WARNING_FG, L_ERROR_FG };
+    extern std::atomic < log_level_t > log_level;
+    extern std::atomic < log_level_t > current_level;
+    log_level_t set_log_level(log_level_t level);
     template <typename... Args> void log(const Args&... args);
 
     template <typename Container>
@@ -187,13 +192,29 @@ namespace debug {
         !debug::is_unordered_map_v<Container>)
 	void print_container(const Container& container)
     {
+        constexpr uint64_t max_elements = 8;
+        uint64_t num_elements = 0;
         LOG_DEV << "[";
         for (auto it = std::begin(container); it != std::end(container); ++it)
         {
+            if (num_elements == max_elements)
+            {
+                num_elements = 0;
+                LOG_DEV << "\n";
+                switch (current_level) {
+                    case L_DEBUG_FG: _log(debug_log, "    "); break;
+                    case L_INFO_FG: _log(info_log, "    "); break;
+                    case L_WARNING_FG: _log(warning_log, "    "); break;
+                    case L_ERROR_FG: _log(error_log, "    "); break;
+                    default: _log(info_log, "    "); break;
+                }
+            }
+
             if (sizeof(*it) == 1 /* 8bit data width */)
             {
                 const auto & tmp = *it;
-                LOG_DEV << "0x" << std::hex << std::setw(2) << std::setfill('0') << *(unsigned*)(& tmp); // ugly workarounds
+                LOG_DEV << "0x" << std::hex << std::setw(2) << std::setfill('0')
+                        << static_cast<unsigned>((*(uint8_t *) (&tmp)) & 0xFF); // ugly workarounds
             }
             else {
                 _log(*it);
@@ -202,6 +223,8 @@ namespace debug {
             if (std::next(it) != std::end(container)) {
                 LOG_DEV << ", ";
             }
+
+            num_elements++;
         }
         LOG_DEV << "]";
     }
@@ -222,13 +245,6 @@ namespace debug {
     	}
     	LOG_DEV << "}";
     }
-
-    extern std::string str_true;
-    extern std::string str_false;
-    enum log_level_t { L_DEBUG_FG = 0, L_INFO_FG, L_WARNING_FG, L_ERROR_FG };
-    extern std::atomic < log_level_t > log_level;
-    extern std::atomic < log_level_t > current_level;
-    log_level_t set_log_level(log_level_t level);
 
     template <typename ParamType> void _log(const ParamType& param)
     {

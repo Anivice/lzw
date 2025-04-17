@@ -192,7 +192,7 @@ void compress_on_one_block(std::vector<uint8_t> * in_buffer, std::vector<uint8_t
     }
 }
 
-std::atomic < int64_t > original_size = 0;
+std::atomic < int64_t > processed_size = 0;
 std::atomic < int64_t > compressed_size = 0;
 
 bool compress(std::basic_istream<char>& input, std::basic_ostream<char>& output)
@@ -219,7 +219,7 @@ bool compress(std::basic_istream<char>& input, std::basic_ostream<char>& output)
             break;
         }
 
-        original_size += actual_size;
+        processed_size += actual_size;
         in_buffer.resize(actual_size);
     }
 
@@ -272,10 +272,10 @@ void compress_from_stdin()
 void compress_file(const std::string& in, const std::string& out)
 {
     fs::path input_path(in);
-    uintmax_t input_size;
+    uintmax_t original_size;
     try {
         // Get the file size
-        input_size = fs::file_size(input_path);
+        original_size = fs::file_size(input_path);
     } catch (const fs::filesystem_error&) {
         throw;
     }
@@ -304,24 +304,24 @@ void compress_file(const std::string& in, const std::string& out)
 
         const auto after = std::chrono::system_clock::now();
         if (const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(after - before).count();
-            verbose && original_size > 0 && duration > 0)
+            verbose && processed_size > 0 && duration > 0)
         {
             std::stringstream ss;
-            const auto bps = original_size * 8 / duration * 1000;
-            uint64_t seconds_left = (input_size - original_size) / (bps / 8);
+            const auto bps = processed_size * 8 / duration * 1000;
+            uint64_t seconds_left = (original_size - processed_size) / (bps / 8);
 
             if (bps > 1024 * 1024)
             {
-                ss << original_size * 8 << " bits processed, speed " << bps / 1024 / 1024 << " Mbps ";
+                ss << processed_size * 8 << " bits processed, speed " << bps / 1024 / 1024 << " Mbps ";
             } else if (bps > 10 * 1024) {
-                ss << original_size * 8 << " bits processed, speed " << bps / 1024 << " Kbps ";
+                ss << processed_size * 8 << " bits processed, speed " << bps / 1024 << " Kbps ";
             } else {
-                ss << original_size * 8 << " bits processed, speed " << bps << " bps ";
+                ss << processed_size * 8 << " bits processed, speed " << bps << " bps ";
             }
 
             ss  << std::fixed << std::setprecision(2)
-                << static_cast<long double>(original_size) / static_cast<long double>(input_size) * 100
-                << " % [ETA=" << seconds_left << "s]";
+                << static_cast<long double>(processed_size) / static_cast<long double>(original_size) * 100
+                << " % [ETA=" << seconds_to_human_readable_dates(seconds_left) << "]";
 
             debug::log(debug::to_stderr,
                 debug::cursor_off,
@@ -374,12 +374,12 @@ int main(const int argc, const char** argv)
 
         auto verbose_print = [&]()->void
         {
-            if (verbose && original_size > 0) {
-                debug::log(debug::to_stderr, debug::info_log, "Original size:     ", original_size * 8, " Bits\n");
+            if (verbose && processed_size > 0) {
+                debug::log(debug::to_stderr, debug::info_log, "Original size:     ", processed_size * 8, " Bits\n");
                 debug::log(debug::to_stderr, debug::info_log, "Compressed size:   ", compressed_size * 8, " Bits\n");
                 debug::log(debug::to_stderr, debug::info_log, "Compression ratio: ", std::fixed, std::setprecision(2),
-                    (static_cast<double>(original_size) - static_cast<double>(compressed_size))
-                        / static_cast<double>(original_size) * 100.0, " %\n");
+                    (static_cast<double>(processed_size) - static_cast<double>(compressed_size))
+                        / static_cast<double>(processed_size) * 100.0, " %\n");
                 debug::log(debug::to_stderr, debug::info_log, "LZW blocks:        ",
                     lzw_compressed_blocks, "\n");
                 debug::log(debug::to_stderr, debug::info_log, "Huffman blocks:    ",

@@ -22,6 +22,7 @@
 #define UTILS_H
 
 #include <cstdint>
+#include <string>
 
 bool is_stdout_pipe();
 void set_binary();
@@ -35,5 +36,7 @@ constexpr uint8_t used_lzw = 0xCA;
 constexpr uint8_t used_huffman = 0xED;
 constexpr uint8_t used_plain = 0x00;
 constexpr unsigned char magic[] = { 0x1f, 0x9d, LZW_COMPRESSION_BIT_SIZE };
+
+std::string seconds_to_human_readable_dates(uint64_t);
 
 #endif //UTILS_H
