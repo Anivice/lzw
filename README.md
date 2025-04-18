@@ -55,7 +55,7 @@ Huffman coding requires a dictionary in the decoding process.
 
 Our definition of a compression ratio is "amount of data compressed in the process."
 Specifically,
-$$ \text{Compression Ratio} = \frac{\text{Original Data Length} - \text{Data Length after Compression}}{\text{Original Data Length}} \times 100 \% $$
+$$\text{Compression Ratio} = \frac{\text{Original Data Length} - \text{Data Length after Compression}}{\text{Original Data Length}} \times 100 \%$$
 Higher compression ratio means better result.
 Compression ratio can be a negative value, indicating data expanded after compression,
 an extremely poor result.
