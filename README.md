@@ -107,7 +107,7 @@ You need GCC 14 or newer, and a build tool like "UNIX Makefile" or Ninja.
 ### Compile
 
 ```bash
-git clone https://github.com/Anivice/lzw && cd lzw && mkdir -p build && cd build && cmake .. && cmake --build .
+git clone https://github.com/Anivice/lzw && cd lzw && mkdir -p build && cd build && cmake ..  -DCMAKE_BUILD_TYPE=Release && cmake --build . --config=Release
 ```
 
 The above command works on all systems.

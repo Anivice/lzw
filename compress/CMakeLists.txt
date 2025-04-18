@@ -18,7 +18,7 @@
 #  SPDX-License-Identifier: GPL-3.0-or-later
 #
 
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.30)
 project(lzw C CXX)
 
 # Set C and C++ standards
@@ -39,7 +39,7 @@ if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
     enable_testing()
 endif ()
 
-add_compile_definitions(LZW_UTIL_VERSION=\"0.1.1\")
+add_compile_definitions(LZW_UTIL_VERSION=\"0.1.2\")
 
 include_directories(src/include)
 
