@@ -524,7 +524,9 @@ make_bitwise_numeric(const Numeric number)
     }
 
     // copy over
-    for (unsigned i = 0; i < std::min(sizeof(Numeric), (uint64_t)RequiredByteBlocks); i++) {
+    for (unsigned i = 0; i < std::min(static_cast<uint64_t>(sizeof(Numeric)),
+        static_cast<uint64_t>(RequiredByteBlocks)); i++)
+    {
         ret.data[i].num = ((uint8_t*)&number)[i];
         ret.data[i].bit = 8;
     }
@@ -679,7 +681,8 @@ bitwise_numeric <
 export_numeric_force() const
 {
     NumericType ret { };
-    for (unsigned i = 0; i < std::min(static_cast<uint64_t>(RequiredByteBlocks), sizeof(NumericType)); i++)
+    for (unsigned i = 0; i < std::min(static_cast<uint64_t>(RequiredByteBlocks),
+        static_cast<uint64_t>(sizeof(NumericType))); i++)
     {
         ((uint8_t*)(&ret))[i] = data[i].num & COMPUTE_8_BIT_COMPLIMENT(data[i].bit);
     }
