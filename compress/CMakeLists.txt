@@ -39,7 +39,7 @@ if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
     enable_testing()
 endif ()
 
-add_compile_definitions(LZW_UTIL_VERSION=\"0.1.0\")
+add_compile_definitions(LZW_UTIL_VERSION=\"0.1.1\")
 
 include_directories(src/include)
 
@@ -60,3 +60,7 @@ add_test(NAME "General_Bitwise_operations" COMMAND ${CMAKE_CURRENT_BINARY_DIR}/b
 add_executable(Huffman_test tests/Huffman.cpp)
 target_link_libraries(Huffman_test log huffman)
 add_test(NAME "General_Huffman_operations" COMMAND ${CMAKE_CURRENT_BINARY_DIR}/Huffman_test)
+
+add_executable(human_readable_test tests/human_readable.cpp)
+target_link_libraries(human_readable_test log lzw)
+add_test(NAME "Human_readable_dates" COMMAND ${CMAKE_CURRENT_BINARY_DIR}/human_readable_test)
