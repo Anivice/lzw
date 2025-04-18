@@ -53,7 +53,7 @@ Arguments::predefined_args_t arguments = {
         .name = "version",
         .short_name = 'v',
         .value_required = false,
-        .explanation = "Get LZW utility version"
+        .explanation = "Get utility version"
     },
     Arguments::single_arg_t {
         .name = "threads",
@@ -103,11 +103,10 @@ std::atomic < bool > disable_huffman = false;
 
 void compress_on_one_block(std::vector<uint8_t> * in_buffer, std::vector<uint8_t> * out_buffer)
 {
-    std::vector<uint8_t>
-    buffer_lzw = *in_buffer, buffer_lzw_output,
-    buffer_huffman = *in_buffer,
-    buffer_huffman_output,
-    buffer_huffman_lzw_output;
+    std::vector < uint8_t >
+        buffer_lzw = *in_buffer, buffer_lzw_output,
+        buffer_huffman = *in_buffer, buffer_huffman_lzw_output;
+    std::thread huffman_thread;
 
     auto LZW9Compress = [](std::vector<uint8_t> & input, std::vector<uint8_t> & output)->uint16_t
     {
@@ -131,18 +130,28 @@ void compress_on_one_block(std::vector<uint8_t> * in_buffer, std::vector<uint8_t
         return data_len_huffman;
     };
 
-    if (!disable_huffman)
+    auto compression_huffman_block = [&]()->void
     {
+        std::vector < uint8_t > buffer_huffman_output;
         // Huffman Encoding
         HuffmanCompress(buffer_huffman, buffer_huffman_output);
-        // LZW for huffman in hope that it compress repeated data patterns
+        // LZW for huffman in hope that it compresses repeated data patterns
         LZW9Compress(buffer_huffman_output, buffer_huffman_lzw_output);
+    };
+
+    if (!disable_huffman) {
+        huffman_thread = std::thread(compression_huffman_block);
     }
 
     if (!disable_lzw)
     {
         // Plain LZW
         LZW9Compress(buffer_lzw, buffer_lzw_output);
+    }
+
+    // external huffman calculation
+    if (huffman_thread.joinable()) {
+        huffman_thread.join();
     }
 
     uint64_t compressed_data_size

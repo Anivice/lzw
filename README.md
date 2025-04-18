@@ -35,103 +35,134 @@ occupy less storage space.
 its occupied bit size is not fixed and can change dynamically,
 and for all symbols, their unit size does not necessarily agree with each other.
 
-## Lempel-Ziv-Welchm Algorithm
+### Lempel-Ziv-Welchm Algorithm
 
-Lempel-Ziv-Welchm algorithm can be encoded and decoded without the knowledge on the full scale of the whole data.
+Lempel-Ziv-Welchm algorithm can encode and decode data
+without the knowledge on their full scale.
 LZW can encode data stream and build a dictionary along with the encoding process,
-and decoder does not rely on a dictionary to decode data.
-It can build the dictionary in the decoding process.
+and decoder can rebuild the dictionary in the decoding process.
+LZW algorithm is most suitable for data with repeated symbol patterns.
 
-The following is an extremely simplified demonstration of the LZW implementation used in the main example.
+### Huffman Coding
 
-```python
-def lzw_compress(input_string_compression):
-    # Initialize dictionary with single character entries
-    dictionary = {chr(i): i for i in range(256)}
-    dict_size = 256
-    current_string = ""
-    compressed_data_compression = []
+Huffman coding is a well-known coding algorithm with variable coding length.
+It is suitable for data with huge variety in length for its symbols.
+High frequency data are encoded with shorter bits and low frequency data are encoded with longer codes,
+resulting in fewer bits used in general.
+Huffman coding requires a dictionary in the decoding process.
 
-    # Iterate over each character in the input string
-    for symbol in input_string_compression:
-        current_string_plus_symbol = current_string + symbol
-        if current_string_plus_symbol in dictionary:
-            current_string = current_string_plus_symbol
-        else:
-            compressed_data_compression.append(dictionary[current_string])
-            dictionary[current_string_plus_symbol] = dict_size
-            dict_size += 1
-            current_string = symbol
+### Compression Ratio
 
-    # Add the last string to the output
-    if current_string:
-        compressed_data_compression.append(dictionary[current_string])
+Our definition of a compression ratio is "amount of data compressed in the process."
+Specifically,
+$$ \text{Compression Ratio} = \frac{\text{Original Data Length} - \text{Data Length after Compression}}{\text{Original Data Length}} \times 100 \% $$
+Higher compression ratio means better result.
+Compression ratio can be a negative value, indicating data expanded after compression,
+an extremely poor result.
 
-    return compressed_data_compression
+## Implementations
+
+Huffman coding sorts symbols in frequency order.
+This is not ideal for dictionary storage since,
+dictionary is exported with a fixed-length header.
+In this example, we used four (4) bits for each symbol entry length.
+Zero (0) means the symbol is not present, and entry can take as much as 15 bits at most.
+
+Ideally, the maximum data block we can handle is 32 KB for each symbol with a unique encoding.
+However, it is entirely possible to have symbols exceeding the 15-bit encoding limit.
+This is the reason why we utilized a simple balance technique,
+in additional to the frequency sorting.
+We assign symbols with low frequency first if the symbol typically has shorter encoding.
+This way we decreased the possibility of encountering a symbol with non-ideal bit length.
+
+This is also the reason why Huffman coding in our example always underperformed LZW
+in almost every example.
+As a compensation for this, we compress the result of Huffman coding again, with LZW.
+This helps further reduce redundancies in the Huffman coding result.
+
+However, some patterns are still more likely to have a higher compression ratio for LZW.
+In this implementation, we did parallel compression.
+We compress the same data using LZW and Huffman-LZW, and compare the result.
+Better result will be chosen as output.
+If compression ratios are both negative,
+original data (no compression) will be used instead.
+
+## Utility Compile and Usage
+
+### Before Compiling
+
+#### Requirements
+
+You need CMake to build this project.
+
+##### **On Windows**
+
+On Windows, you need Visual Studio 2022 or newer.
+This project uses C++ 23 specifications and is not supported in older versions.
+
+#### **On UNIX-Like (\*BSD, Linux)**
+
+You need GCC 14 or newer, and a build tool like "UNIX Makefile" or Ninja.
+
+### Compile
+
+```bash
+git clone https://github.com/Anivice/lzw && cd lzw && mkdir -p build && cd build && cmake .. && cmake --build .
 ```
 
-As is shown above, the compressor first initialized a dictionary of 256 entries,
-since we are encoding on an 8-bit system, with possible dangling data that have $2^{8} = 256$ possibilities.
-Each entry is assigned with the corresponding word, which is exactly the key.
+The above command works on all systems.
 
-Say, we compress the string `"ABABABABA"`.
+### Usage
 
-```markdown
-Original String: ABABABABA
-=> A
-    -- Current string: ``
-    -- Check dictionary
-        -- Combined symbol `A` is in dictionary
-=> B
-    -- Current string: `A`
-    -- Check dictionary
-        -- Combined symbol `AB` not in dictionary
-            -- Output previous symbol combination `A` with entry `65`
-            -- Compressed data is now `[65]`
-            -- Created symbol `AB` assigned with value 256
-            -- Updated current string as `B`
-=> A
-    -- Current string: `B`
-    -- Check dictionary
-        -- Combined symbol `BA` not in dictionary
-            -- Output previous symbol combination `B` with entry `66`
-            -- Compressed data is now `[65, 66]`
-            -- Created symbol `BA` assigned with value 257
-            -- Updated current string as `A`
-=> B
-    -- Current string: `A`
-    -- Check dictionary
-        -- Combined symbol `AB` is in dictionary
-=> A
-    -- Current string: `AB`
-    -- Check dictionary
-        -- Combined symbol `ABA` not in dictionary
-            -- Output previous symbol combination `AB` with entry `256`
-            -- Compressed data is now `[65, 66, 256]`
-            -- Created symbol `ABA` assigned with value 258
-            -- Updated current string as `A`
-=> B
-    -- Current string: `A`
-    -- Check dictionary
-        -- Combined symbol `AB` is in dictionary
-=> A
-    -- Current string: `AB`
-    -- Check dictionary
-        -- Combined symbol `ABA` is in dictionary
-=> B
-    -- Current string: `ABA`
-    -- Check dictionary
-        -- Combined symbol `ABAB` not in dictionary
-            -- Output previous symbol combination `ABA` with entry `258`
-            -- Compressed data is now `[65, 66, 256, 258]`
-            -- Created symbol `ABAB` assigned with value 259
-            -- Updated current string as `B`
-=> A
-    -- Current string: `B`
-    -- Check dictionary
-        -- Combined symbol `BA` is in dictionary
--- Added tailing data from key `BA`, which is `257`
-Compressed Data: [65, 66, 256, 258, 257]
+#### `compile`
+
+```bash
+compress [OPTIONS]
+OPTIONS: 
+    -h,--help            Show this help message
+    -o,--output          Set output file
+    -i,--input           Set input file
+    -v,--version         Get utility version
+    -T,--threads         Multi-thread compression
+    -V,--verbose         Enable verbose mode
+    -H,--huffman-only    Disable LZW compression size comparison
+    -L,--lzw-only        Disable Huffman compression size comparison
+    -A,--archive         Disable compression
+    -B,--block-size      Set block size (in bytes, default 16384 (16KB), 32767 Max (32KB - 1))
 ```
 
+#### `decompile`
 
+```bash
+decompress [OPTIONS]
+OPTIONS: 
+    -h,--help       Show this help message
+    -o,--output     Set output file
+    -i,--input      Set input file
+    -v,--version    Get utility version
+    -T,--threads    Multi-thread decompression
+    -V,--verbose    Enable verbose mode
+```
+
+### Obtain Test Data
+
+Test data can be obtained only if you install git large file extension git-lfs.
+Details can be found [here](https://git-lfs.com/).
+
+If you have already installed git-lfs, you can obtain test data using the following command:
+
+```bash
+git lfs install && git lfs checkout && git lfs pull
+```
+
+### Test Result
+
+#### Compression Result on Example Data
+
+![Compression Result on Example Data](resources/compress-cmd.png)
+
+#### Compression Result Size Comparison with Windows NTFS Transparent Compression
+
+Windows transparent compression result (Left) is somewhat larger than our result (right).
+
+![Compression Result Size Comparison with Windows NTFS Transparent Compression](resources/compress.png)

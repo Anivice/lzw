@@ -53,13 +53,13 @@ Arguments::predefined_args_t arguments = {
         .name = "version",
         .short_name = 'v',
         .value_required = false,
-        .explanation = "Get LZW utility version"
+        .explanation = "Get utility version"
     },
     Arguments::single_arg_t {
         .name = "threads",
         .short_name = 'T',
         .value_required = true,
-        .explanation = "Multi-thread compression"
+        .explanation = "Multi-thread decompression"
     },
     Arguments::single_arg_t {
         .name = "verbose",
