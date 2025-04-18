@@ -549,14 +549,10 @@ void Huffman::compress()
     output_data_.push_back(((uint8_t*)&table_size)[1]);
     output_data_.insert(end(output_data_), begin(table), end(table));
 
+    // I need only 18 bits, since Max Block Size = 32 KB - 1, and 3 * 8 == 24, so 3 bytes is sufficient
     output_data_.push_back(((uint8_t*)&bits)[0]);
     output_data_.push_back(((uint8_t*)&bits)[1]);
     output_data_.push_back(((uint8_t*)&bits)[2]);
-    output_data_.push_back(((uint8_t*)&bits)[3]);
-    output_data_.push_back(((uint8_t*)&bits)[4]);
-    output_data_.push_back(((uint8_t*)&bits)[5]);
-    output_data_.push_back(((uint8_t*)&bits)[6]);
-    output_data_.push_back(((uint8_t*)&bits)[7]);
     output_data_.insert(end(output_data_), begin(data), end(data));
 }
 
@@ -574,9 +570,9 @@ void Huffman::decompress()
 
     import_table(table);
 
-    uint64_t bits = 0;
-    std::memcpy(&bits, input_data_.data() + read_offset, sizeof(uint64_t));
-    read_offset += sizeof(uint64_t);
+    uint32_t bits = 0;
+    std::memcpy(&bits, input_data_.data() + read_offset, 3);
+    read_offset += 3;
 
     input_data_.erase(begin(input_data_), begin(input_data_) + static_cast<int64_t>(read_offset));
     convert_input_to_raw_dump(bits);
