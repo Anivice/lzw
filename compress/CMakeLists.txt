@@ -39,28 +39,32 @@ if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
     enable_testing()
 endif ()
 
-add_compile_definitions(LZW_UTIL_VERSION=\"0.1.3\")
+add_compile_definitions(COMPRESS_UTIL_VERSION=\"0.1.3\")
 
 include_directories(src/include)
 
-add_library(log OBJECT src/log.cpp src/include/log.hpp)
-add_library(arg_parser OBJECT src/argument_parser.cpp src/include/argument_parser.h)
-add_library(lzw OBJECT src/include/lzw.h src/include/utils.h src/utils.cpp)
-add_library(huffman OBJECT src/Huffman.cpp src/include/Huffman.h)
+add_library(external STATIC
+        src/Huffman.cpp src/include/Huffman.h
+        src/include/lzw.h src/include/lzw.inl
+        src/include/utils.h src/utils.cpp
+        src/argument_parser.cpp src/include/argument_parser.h
+        src/include/numeric.h src/include/numeric.inl
+        src/log.cpp src/include/log.hpp
+)
 
 add_executable(compress src/compress.cpp)
 add_executable(decompress src/decompress.cpp)
-target_link_libraries(compress PRIVATE log arg_parser lzw huffman)
-target_link_libraries(decompress PRIVATE log arg_parser lzw huffman)
+target_link_libraries(compress PRIVATE external)
+target_link_libraries(decompress PRIVATE external)
 
 add_executable(bitwise tests/bitwise.cpp)
-target_link_libraries(bitwise log arg_parser lzw)
+target_link_libraries(bitwise external)
 add_test(NAME "General_Bitwise_operations" COMMAND ${CMAKE_CURRENT_BINARY_DIR}/bitwise)
 
 add_executable(Huffman_test tests/Huffman.cpp)
-target_link_libraries(Huffman_test log huffman)
+target_link_libraries(Huffman_test external)
 add_test(NAME "General_Huffman_operations" COMMAND ${CMAKE_CURRENT_BINARY_DIR}/Huffman_test)
 
 add_executable(human_readable_test tests/human_readable.cpp)
-target_link_libraries(human_readable_test log lzw)
+target_link_libraries(human_readable_test external)
 add_test(NAME "Human_readable_dates" COMMAND ${CMAKE_CURRENT_BINARY_DIR}/human_readable_test)

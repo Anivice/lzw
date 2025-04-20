@@ -384,7 +384,7 @@ int main(const int argc, const char** argv)
         }
 
         if (static_cast<Arguments::args_t>(args).contains("version")) {
-			std::cout << "Decompress Utility version " << LZW_UTIL_VERSION << std::endl;
+			std::cout << "Decompress Utility version " << COMPRESS_UTIL_VERSION << std::endl;
 			return EXIT_SUCCESS;
 		}
 
