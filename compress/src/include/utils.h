@@ -23,6 +23,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 bool is_stdout_pipe();
 void set_binary();
@@ -38,5 +39,16 @@ constexpr uint8_t used_plain = 0x00;
 constexpr unsigned char magic[] = { 0x1f, 0x9d, LZW_COMPRESSION_BIT_SIZE };
 
 std::string seconds_to_human_readable_dates(uint64_t);
+
+template < typename Type >
+Type average(const std::vector<Type> & data)
+{
+    Type sum = 0;
+    for (const auto &val : data) {
+        sum = sum + val; // no += for compatibility
+    }
+
+    return sum / data.size();
+}
 
 #endif //UTILS_H

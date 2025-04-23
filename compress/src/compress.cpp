@@ -300,6 +300,19 @@ void compress_file(const std::string& in, const std::string& out)
         throw std::runtime_error("Failed to open output file: " + out);
     }
 
+    std::vector < uint64_t > seconds_left_sample_space;
+    const uint64_t sample_size = std::min(static_cast<unsigned long>(original_size / BLOCK_SIZE), 256ul);
+    seconds_left_sample_space.reserve(sample_size);
+    auto add_sample = [&](const uint64_t sample)->void
+    {
+        if (seconds_left_sample_space.size() < sample_size) {
+            seconds_left_sample_space.push_back(sample);
+        } else {
+            seconds_left_sample_space.erase(seconds_left_sample_space.begin());
+            seconds_left_sample_space.push_back(sample);
+        }
+    };
+
     const auto before = std::chrono::system_clock::now();
 
     output_file.write((char*)(magic), sizeof(magic));
@@ -318,6 +331,7 @@ void compress_file(const std::string& in, const std::string& out)
             std::stringstream ss;
             const auto bps = processed_size * 8 / duration * 1000;
             uint64_t seconds_left = (original_size - processed_size) / (bps / 8);
+            add_sample(seconds_left);
 
             if (bps > 1024 * 1024)
             {
@@ -330,7 +344,7 @@ void compress_file(const std::string& in, const std::string& out)
 
             ss  << std::fixed << std::setprecision(2)
                 << static_cast<long double>(processed_size) / static_cast<long double>(original_size) * 100
-                << " % [ETA=" << seconds_to_human_readable_dates(seconds_left) << "]";
+                << " % [ETA=" << seconds_to_human_readable_dates(average(seconds_left_sample_space)) << "]";
 
             debug::log(debug::to_stderr,
                 debug::cursor_off,

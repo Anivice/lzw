@@ -288,6 +288,18 @@ void decompress_file(const std::string& in, const std::string& out)
     if (BLOCK_SIZE > BLOCK_SIZE_MAX) {
         throw std::runtime_error("Decompression failed due to invalid block size (decompression bomb?)");
     }
+    std::vector < uint64_t > seconds_left_sample_space;
+    const uint64_t sample_size = std::min(static_cast<unsigned long>(original_size / BLOCK_SIZE), 256ul);
+    seconds_left_sample_space.reserve(sample_size);
+    auto add_sample = [&](const uint64_t sample)->void
+    {
+        if (seconds_left_sample_space.size() < sample_size) {
+            seconds_left_sample_space.push_back(sample);
+        } else {
+            seconds_left_sample_space.erase(seconds_left_sample_space.begin());
+            seconds_left_sample_space.push_back(sample);
+        }
+    };
 
     const auto before = std::chrono::system_clock::now();
 
@@ -305,6 +317,7 @@ void decompress_file(const std::string& in, const std::string& out)
             const auto bps = processed_size * 8 / duration * 1000;
             const uint64_t bytes_left = (original_size > processed_size ? original_size - processed_size : 0);
             const uint64_t seconds_left = bytes_left / (bps / 8);
+            add_sample(seconds_left);
 
             if (bps > 1024 * 1024)
             {
@@ -319,7 +332,7 @@ void decompress_file(const std::string& in, const std::string& out)
                 << (processed_size < original_size ?
                     static_cast<long double>(processed_size) / static_cast<long double>(original_size) * 100 :
                     100.00f)
-                << " % [ETA=" << seconds_to_human_readable_dates(seconds_left) << "]";
+                << " % [ETA=" << seconds_to_human_readable_dates(average(seconds_left_sample_space)) << "]";
 
             debug::log(debug::to_stderr,
                 debug::cursor_off,
