@@ -332,7 +332,7 @@ void decompress_file(const std::string& in, const std::string& out)
                 << (processed_size < original_size ?
                     static_cast<long double>(processed_size) / static_cast<long double>(original_size) * 100 :
                     100.00f)
-                << " % [ETA=" << seconds_to_human_readable_dates(average(seconds_left_sample_space)) << "]";
+                << "% [ETA=" << seconds_to_human_readable_dates(average(seconds_left_sample_space)) << "]";
 
             debug::log(debug::to_stderr,
                 debug::cursor_off,

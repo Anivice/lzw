@@ -269,6 +269,7 @@ void compress_from_stdin()
     set_binary();
     std::cout.write((char*)(magic), sizeof(magic));
     std::cout.write((char*)(&BLOCK_SIZE), sizeof(BLOCK_SIZE));
+    compressed_size += sizeof(magic) + sizeof(BLOCK_SIZE);
     while (std::cin.good()) {
         if (!compress(std::cin, std::cout)) {
             break;
@@ -317,7 +318,7 @@ void compress_file(const std::string& in, const std::string& out)
 
     output_file.write((char*)(magic), sizeof(magic));
     output_file.write((char*)(&BLOCK_SIZE), sizeof(BLOCK_SIZE));
-
+    compressed_size += sizeof(magic) + sizeof(BLOCK_SIZE);
     while (input_file.good())
     {
         if (!compress(input_file, output_file)) {
@@ -344,7 +345,7 @@ void compress_file(const std::string& in, const std::string& out)
 
             ss  << std::fixed << std::setprecision(2)
                 << static_cast<long double>(processed_size) / static_cast<long double>(original_size) * 100
-                << " % [ETA=" << seconds_to_human_readable_dates(average(seconds_left_sample_space)) << "]";
+                << "% [ETA=" << seconds_to_human_readable_dates(average(seconds_left_sample_space)) << "]";
 
             debug::log(debug::to_stderr,
                 debug::cursor_off,
@@ -398,17 +399,27 @@ int main(const int argc, const char** argv)
         auto verbose_print = [&]()->void
         {
             if (verbose && processed_size > 0) {
+                const auto total_blocks = lzw_compressed_blocks + huffman_compressed_blocks + raw_blocks;
+                const auto compressed_blocks = lzw_compressed_blocks + huffman_compressed_blocks;
                 debug::log(debug::to_stderr, debug::info_log, "Original size:     ", processed_size * 8, " Bits\n");
                 debug::log(debug::to_stderr, debug::info_log, "Compressed size:   ", compressed_size * 8, " Bits\n");
-                debug::log(debug::to_stderr, debug::info_log, "Compression ratio: ", std::fixed, std::setprecision(2),
+                debug::log(debug::to_stderr, debug::info_log, "Compression ratio: ", std::fixed, std::setprecision(4),
                     (static_cast<double>(processed_size) - static_cast<double>(compressed_size))
-                        / static_cast<double>(processed_size) * 100.0, " %\n");
-                debug::log(debug::to_stderr, debug::info_log, "LZW blocks:        ",
-                    lzw_compressed_blocks, "\n");
-                debug::log(debug::to_stderr, debug::info_log, "Huffman blocks:    ",
-                    huffman_compressed_blocks, "\n");
-                debug::log(debug::to_stderr, debug::info_log, "Raw blocks:        ",
-                    raw_blocks, "\n");
+                        / static_cast<double>(processed_size) * 100.0, "%\n");
+                debug::log(debug::to_stderr, debug::info_log, "C/O ratio:         ", std::fixed, std::setprecision(4),
+                    static_cast<double>(compressed_size) / static_cast<double>(processed_size) * 100, "\n");
+                debug::log(debug::to_stderr, debug::info_log, "Block Size:        ", BLOCK_SIZE , " Bytes (", BLOCK_SIZE / 1024, " KB)\n");
+                debug::log(debug::to_stderr, debug::info_log, "Block count:       ", total_blocks, "\n");
+                debug::log(debug::to_stderr, debug::info_log, "Compressed blocks: ", compressed_blocks, "\n");
+                debug::log(debug::to_stderr, debug::info_log, " - LZW blocks:     ", lzw_compressed_blocks, "\n");
+                debug::log(debug::to_stderr, debug::info_log, " - Huffman blocks: ", huffman_compressed_blocks, "\n");
+                debug::log(debug::to_stderr, debug::info_log, "Raw blocks:        ", raw_blocks, "\n");
+                debug::log(debug::to_stderr, debug::info_log, "C/R ratio:         ", std::fixed, std::setprecision(6),
+                    (raw_blocks != 0 ? static_cast<double>(compressed_blocks) / static_cast<double>(raw_blocks) :
+                        NAN), "\n");
+                debug::log(debug::to_stderr, debug::info_log, "C/A percentage:    ", std::fixed, std::setprecision(4),
+                    (raw_blocks != 0 ? static_cast<double>(compressed_blocks) / static_cast<double>(total_blocks) * 100.0 :
+                        NAN), "% \n");
             }
         };
 

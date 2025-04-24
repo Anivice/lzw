@@ -50,6 +50,7 @@ add_library(external STATIC
         src/argument_parser.cpp src/include/argument_parser.h
         src/include/numeric.h src/include/numeric.inl
         src/log.cpp src/include/log.hpp
+        src/arithmetic.cpp src/include/arithmetic.h
 )
 
 add_executable(compress src/compress.cpp)
@@ -69,4 +70,8 @@ if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
     add_executable(human_readable_test tests/human_readable.cpp)
     target_link_libraries(human_readable_test external)
     add_test(NAME "Human_readable_dates" COMMAND ${CMAKE_CURRENT_BINARY_DIR}/human_readable_test)
+
+    add_executable(arithmetic_test tests/arithmetic.cpp)
+    target_link_libraries(arithmetic_test PRIVATE external)
+    add_test(NAME "Arithmetic_test" COMMAND ${CMAKE_CURRENT_BINARY_DIR}/arithmetic_test)
 endif ()
