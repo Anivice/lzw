@@ -39,7 +39,7 @@ if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
     enable_testing()
 endif ()
 
-add_compile_definitions(COMPRESS_UTIL_VERSION=\"0.1.4\")
+add_compile_definitions(COMPRESS_UTIL_VERSION=\"0.1.5\")
 
 include_directories(src/include)
 

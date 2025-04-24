@@ -438,9 +438,11 @@ int main(const int argc, const char** argv)
                 nullptr, 10);
             if (thread_count > std::thread::hardware_concurrency()) {
                 debug::log(debug::to_stderr, debug::warning_log,
-                    "You are using ", thread_count, " threads, are you SURE?\n"
-                    "Press Enter to confirm or Ctrl+C to abort > ");
-                getchar();
+                    "You are using ", thread_count, " threads, while your hardware concurrency is ",
+                    std::thread::hardware_concurrency(), "threads.\n"
+                    "You won't have a drastic beneficial effect with these many threads.\n"
+                    "Are you SURE? Press Enter to confirm or Ctrl+C to abort > ");
+                std::cin.get();
             }
         }
 
@@ -461,7 +463,7 @@ int main(const int argc, const char** argv)
         {
             const auto block_size_literal =
                 static_cast<Arguments::args_t>(args).at("block-size").back();
-            BLOCK_SIZE = std::strtoul(block_size_literal.c_str(), nullptr, 10);
+            BLOCK_SIZE = static_cast<uint16_t>(std::strtoul(block_size_literal.c_str(), nullptr, 10));
             if (BLOCK_SIZE > BLOCK_SIZE_MAX) {
                 throw std::runtime_error("Block size too large, maximum " + std::to_string(BLOCK_SIZE_MAX) + " Bytes\n");
             }

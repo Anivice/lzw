@@ -29,7 +29,7 @@ bool is_stdout_pipe();
 void set_binary();
 
 #define LZW_COMPRESSION_BIT_SIZE 9
-extern uint64_t BLOCK_SIZE;
+extern uint16_t BLOCK_SIZE;
 #define HASH_BITS (LZW_COMPRESSION_BIT_SIZE + (LZW_COMPRESSION_BIT_SIZE % 8))
 #define BLOCK_SIZE_MAX (32767)
 

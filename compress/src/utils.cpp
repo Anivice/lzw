@@ -72,7 +72,7 @@ void set_binary()
 #endif
 }
 
-uint64_t BLOCK_SIZE =  (16 * 1024);
+uint16_t BLOCK_SIZE =  (16 * 1024);
 
 std::string seconds_to_human_readable_dates(uint64_t seconds)
 {
