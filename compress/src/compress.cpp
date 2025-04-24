@@ -439,7 +439,7 @@ int main(const int argc, const char** argv)
             if (thread_count > std::thread::hardware_concurrency()) {
                 debug::log(debug::to_stderr, debug::warning_log,
                     "You are using ", thread_count, " threads, while your hardware concurrency is ",
-                    std::thread::hardware_concurrency(), "threads.\n"
+                    std::thread::hardware_concurrency(), " threads.\n"
                     "You won't have a drastic beneficial effect with these many threads.\n"
                     "Are you SURE? Press Enter to confirm or Ctrl+C to abort > ");
                 std::cin.get();
