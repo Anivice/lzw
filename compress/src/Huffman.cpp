@@ -25,12 +25,10 @@
 #include "log.hpp"
 #include <sstream>
 #include <bitset>
-#include <ranges>
 #include "numeric.h"
 
 void Huffman::count_data_frequencies()
 {
-    frequency_map frequency_map_;
     frequency_map_.resize(256);
     for (const auto & c : input_data_) {
         frequency_map_[c].second += 1;

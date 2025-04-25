@@ -30,8 +30,10 @@
 #include <map>
 
 class Huffman {
-private:
+public:
     using frequency_map = std::vector < std::pair < uint8_t, uint64_t > >;
+
+private:
     std::vector < uint8_t > & input_data_;
     std::vector < uint8_t > & output_data_;
 
@@ -56,6 +58,7 @@ private:
     full_map_t full_map;
     std::map < uint8_t, std::string, std::less<> > encoded_pairs;
     std::string raw_dump;
+    frequency_map frequency_map_;
 
     void count_data_frequencies();
     void build_binary_tree_based_on_the_frequency_map();
@@ -89,6 +92,8 @@ public:
 
     void compress();
     void decompress();
+
+    [[nodiscard]] frequency_map get_frequency_map() const { return frequency_map_; }
 };
 
 #endif //HUFFMAN_H

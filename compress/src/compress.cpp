@@ -27,6 +27,7 @@
 #include <thread>
 #include <chrono>
 #include <filesystem>
+#include <ranges>
 
 namespace fs = std::filesystem;
 
@@ -100,6 +101,7 @@ std::atomic < uint64_t > huffman_compressed_blocks = 0;
 std::atomic < uint64_t > raw_blocks = 0;
 std::atomic < bool > disable_lzw = false;
 std::atomic < bool > disable_huffman = false;
+std::map <uint8_t, uint64_t> frequency_map;
 
 void compress_on_one_block(std::vector<uint8_t> * in_buffer, std::vector<uint8_t> * out_buffer)
 {
@@ -126,6 +128,15 @@ void compress_on_one_block(std::vector<uint8_t> * in_buffer, std::vector<uint8_t
         // try huffman
         Huffman huffmanCompressor(input, output);
         huffmanCompressor.compress();
+
+        if (verbose) {
+            for (const auto freq_map = huffmanCompressor.get_frequency_map();
+                const auto & [symbol, freq] : freq_map)
+            {
+                frequency_map[symbol] += freq;
+            }
+        }
+
         const auto data_len_huffman = static_cast<uint16_t>(output.size());
         return data_len_huffman;
     };
@@ -398,28 +409,74 @@ int main(const int argc, const char** argv)
 
         auto verbose_print = [&]()->void
         {
-            if (verbose && processed_size > 0) {
+            if (verbose && processed_size > 0)
+            {
+                uint64_t total_tokens = 0;
+                for (const auto & freq: frequency_map | std::views::values) {
+                    total_tokens += freq;
+                }
+
+                std::vector < long double > EntropyList;
+                EntropyList.reserve(256);
+                for (const auto & freq: frequency_map | std::views::values) {
+                    const auto prob = static_cast<long double>(freq) / static_cast<long double>(total_tokens);
+                    EntropyList.push_back(prob * log2l(prob));
+                }
+
+                long double entropy = 0;
+                for (const auto & entropy_sig: EntropyList) {
+                    entropy += entropy_sig;
+                }
+                entropy = -entropy;
+
+                const auto expectation = static_cast<long double>(processed_size) * entropy;
+                auto expectation_int = static_cast<uint64_t>(expectation);
+                if (expectation - static_cast<long double>(expectation_int) > 0) {
+                    expectation_int++;
+                }
+
+                const auto numerical_bits_expectation = expectation_int / 8 * 8 + (expectation_int % 8 == 0 ? 0 : 8);
+                const auto actual_used_bits = compressed_size * 8;
+                const auto expectation_ratio = (numerical_bits_expectation != 0 ?
+                    static_cast<long double>(actual_used_bits) / static_cast<long double>(numerical_bits_expectation) : NAN);
                 const auto total_blocks = lzw_compressed_blocks + huffman_compressed_blocks + raw_blocks;
                 const auto compressed_blocks = lzw_compressed_blocks + huffman_compressed_blocks;
+                const auto compression_ratio = (static_cast<double>(processed_size) - static_cast<double>(compressed_size)) / static_cast<double>(processed_size);
+                const auto CORatio = static_cast<double>(compressed_size) / static_cast<double>(processed_size);
+                const auto CRRatio = (raw_blocks != 0 ? static_cast<double>(compressed_blocks) / static_cast<double>(raw_blocks) : NAN);
+                const auto CAPercentage = (raw_blocks != 0 ? static_cast<double>(compressed_blocks) / static_cast<double>(total_blocks) * 100.0 : NAN);
+                std::string performance;
+
+                if (expectation_ratio > 1) {
+                    performance = "Not Ideal";
+                } else if (expectation_ratio <= 1 && expectation_ratio > 0.9) {
+                    performance = "Normal";
+                } else if (expectation_ratio <= 0.9 && expectation_ratio > 0.5) {
+                    performance = "Healthy";
+                } else if (expectation_ratio <= 0.5) {
+                    performance = "Largely Exceeded Expectation";
+                }
+
+                if (performance.empty()) {
+                    performance = "Possibly Mono-Contextual Data";
+                }
+
                 debug::log(debug::to_stderr, debug::info_log, "Original size:     ", processed_size * 8, " Bits\n");
                 debug::log(debug::to_stderr, debug::info_log, "Compressed size:   ", compressed_size * 8, " Bits\n");
-                debug::log(debug::to_stderr, debug::info_log, "Compression ratio: ", std::fixed, std::setprecision(4),
-                    (static_cast<double>(processed_size) - static_cast<double>(compressed_size))
-                        / static_cast<double>(processed_size) * 100.0, "%\n");
-                debug::log(debug::to_stderr, debug::info_log, "C/O ratio:         ", std::fixed, std::setprecision(4),
-                    static_cast<double>(compressed_size) / static_cast<double>(processed_size) * 100, "\n");
+                debug::log(debug::to_stderr, debug::info_log, "Compression ratio: ", std::fixed, std::setprecision(4), compression_ratio * 100.0, "%\n");
+                debug::log(debug::to_stderr, debug::info_log, "C/O ratio:         ", std::fixed, std::setprecision(4), CORatio * 100, "\n");
                 debug::log(debug::to_stderr, debug::info_log, "Block Size:        ", BLOCK_SIZE , " Bytes (", BLOCK_SIZE / 1024, " KB)\n");
                 debug::log(debug::to_stderr, debug::info_log, "Block count:       ", total_blocks, "\n");
                 debug::log(debug::to_stderr, debug::info_log, "Compressed blocks: ", compressed_blocks, "\n");
                 debug::log(debug::to_stderr, debug::info_log, " - LZW blocks:     ", lzw_compressed_blocks, "\n");
                 debug::log(debug::to_stderr, debug::info_log, " - Huffman blocks: ", huffman_compressed_blocks, "\n");
                 debug::log(debug::to_stderr, debug::info_log, "Raw blocks:        ", raw_blocks, "\n");
-                debug::log(debug::to_stderr, debug::info_log, "C/R ratio:         ", std::fixed, std::setprecision(6),
-                    (raw_blocks != 0 ? static_cast<double>(compressed_blocks) / static_cast<double>(raw_blocks) :
-                        NAN), "\n");
-                debug::log(debug::to_stderr, debug::info_log, "C/A percentage:    ", std::fixed, std::setprecision(4),
-                    (raw_blocks != 0 ? static_cast<double>(compressed_blocks) / static_cast<double>(total_blocks) * 100.0 :
-                        NAN), "% \n");
+                debug::log(debug::to_stderr, debug::info_log, "C/R ratio:         ", std::fixed, std::setprecision(6), CRRatio, "\n");
+                debug::log(debug::to_stderr, debug::info_log, "C/A percentage:    ", std::fixed, std::setprecision(4), CAPercentage, "% \n");
+                debug::log(debug::to_stderr, debug::info_log, "Raw data entropy:  ", std::fixed, std::setprecision(4), entropy, "\n");
+                debug::log(debug::to_stderr, debug::info_log, "Expectation:       ", numerical_bits_expectation, " Bits\n");
+                debug::log(debug::to_stderr, debug::info_log, "AB/EB percentage:  ", expectation_ratio * 100, " %\n");
+                debug::log(debug::to_stderr, debug::info_log, "Performance:       ", performance, "\n");
             }
         };
 
