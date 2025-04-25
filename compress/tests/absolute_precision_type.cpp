@@ -14,5 +14,7 @@ int main()
     std::cout << num3.to_string() << std::endl;
     std::cout << num4.to_string() << std::endl;
     std::cout << num5.to_string() << std::endl;
-    std::cout << (num4 / 3).to_string() << std::endl;
+    std::cout << (num1 / 3).to_string() << std::endl;
+
+    debug::log(debug::warning_log, num4 > num1, "\n");
 }

@@ -419,19 +419,21 @@ bool absolute_precision_type::operator<(const absolute_precision_type & other) c
     other_.trim();
 
     padding_string_len(this_.frac, other_.frac);
-    for (auto i = static_cast<int64_t>(this_.frac.size() - 1); i >= 0; --i)
+    for (uint64_t i = 0; i < this_.frac.size(); i++)
     {
         if (this_.frac[i] > other_.frac[i]) {
             return false;
+        } else if (this_.frac[i] < other_.frac[i]) {
+            return true;
         }
     }
 
-    return true;
+    return false;
 }
 
 bool absolute_precision_type::operator>(const absolute_precision_type & other) const
 {
-    return !((*this < other) && (*this == other));
+    return !((*this < other) || (*this == other));
 }
 
 bool absolute_precision_type::operator<=(const absolute_precision_type & other) const
