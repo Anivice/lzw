@@ -218,6 +218,10 @@ absolute_precision_type absolute_precision_type::operator*(
 
     absolute_precision_type shorter = (this_.frac.size() < that_.frac.size() ? this_ : that_);
     absolute_precision_type longer = (this_.frac.size() > that_.frac.size() ? this_ : that_);
+    if (this_.frac.size() == that_.frac.size()) {
+        shorter = this_;
+        longer = that_;
+    }
 
     for (auto i = static_cast<int64_t>(shorter.frac.size() - 1); i >= 0; --i)
     {
@@ -270,6 +274,18 @@ absolute_precision_type absolute_precision_type::operator*(
     ret.frac = result;
     ret.is_one = false;
     ret.trim();
+
+    if (ret.frac.size() > max_allowed_precision_level)
+    {
+        ret.frac.resize(max_allowed_precision_level + 1);
+        if (ret.frac.back() > '5') {
+            ret += make_absolute_precision_type(
+                "0." + std::string(max_allowed_precision_level - 1, '0') + "1");
+        }
+
+        ret.frac.pop_back();
+    }
+
     return ret;
 }
 
@@ -319,9 +335,8 @@ absolute_precision_type absolute_precision_type::operator/(const uint64_t other_
         return target_literal % divisor_literal == 0;
     };
 
-    auto this_ = (this->is_one ? std::string(64, '9') : this->frac);
-    auto const_this_ = this_;
-    std::string that_ = ulltostr(other_);
+    auto const_this_ = (this->is_one ? std::string(64, '9') : this->frac);
+    auto that_ = ulltostr(other_);
 
     std::string result;
     uint64_t index = 0;
@@ -334,14 +349,14 @@ absolute_precision_type absolute_precision_type::operator/(const uint64_t other_
             break;
         }
 
+        if (index >= const_this_.size()) {
+            const_this_ += std::string(const_this_.size() - index + 1, '0'); // padding
+        }
+
         current_session_target += const_this_[index];
         index++;
-        if (!larger_than(current_session_target, that_))
-        {
+        if (!larger_than(current_session_target, that_)) {
             result += '0';
-            if (index > const_this_.size()) {
-                const_this_ += '0'; // padding
-            }
         } else {
             std::string remainder, quo;
             balance(current_session_target, that_);
@@ -361,6 +376,17 @@ absolute_precision_type absolute_precision_type::operator/(const uint64_t other_
     ret.frac = result;
     ret.is_one = false;
     ret.trim();
+
+    if (ret.frac.size() > max_allowed_precision_level)
+    {
+        ret.frac.resize(max_allowed_precision_level + 1);
+        if (ret.frac.back() > '5') {
+            *(ret.frac.end() - 2) += 1;
+        }
+
+        ret.frac.pop_back();
+    }
+
     return ret;
 }
 
@@ -438,18 +464,18 @@ bool absolute_precision_type::operator>(const absolute_precision_type & other) c
 
 bool absolute_precision_type::operator<=(const absolute_precision_type & other) const
 {
-    return !(other > *this);
+    return !(*this > other);
 }
 
 bool absolute_precision_type::operator>=(const absolute_precision_type & other) const
 {
-    return !(other < *this);
+    return *this > other || *this == other;
 }
 
 std::string absolute_precision_type::to_string() const {
     auto braced = *this;
     braced.trim();
-    return (is_one ? "1" : "0." + braced.frac);
+    return (is_one ? "1" : "0" + (braced.frac.empty() ? "" : "." + braced.frac));
 }
 
 absolute_precision_type absolute_precision_type::make_absolute_precision_type(const std::string & result)

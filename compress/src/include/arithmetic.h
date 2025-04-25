@@ -4,12 +4,12 @@
 #include <map>
 #include <utility>
 #include <vector>
-#include <string>
+#include "absolute_precision_type.h"
 
 class arithmetic
 {
 private:
-    using float_t = long double;
+    using float_t = absolute_precision_type;
     using probability_table_type = std::map < uint8_t, float_t >;
     using symbol_pool_type = std::map < uint8_t, uint64_t >;
     using probability_distribution_table_type = std::map < uint8_t, std::pair < float_t, float_t >, std::less<> >;
@@ -30,7 +30,7 @@ public:
 
     void form_symbol_pool_from_input_data();
     void form_probability_table_from_existing_symbol_pool();
-    void form_probability_distribution_from_existing_probability_table(float_t, float_t);
+    void form_probability_distribution_from_existing_probability_table(float_t, const float_t&);
     void progressive_symbolization();
     void progressive_decoding();
 

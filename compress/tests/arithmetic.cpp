@@ -6,9 +6,10 @@ int main()
     std::vector < uint8_t > input = {
         'A', 'B', 'C', 'D', 'E', 'F', 'G',
                             'E', 'F', 'G',                'H',
-        // 'A', 'B', 'C', 'D', 'E', 'F', 'G',                'H',
-        //      'B', 'C',
-        //                                                         'S', 'Q',  'P', 'R'
+        'A', 'B', 'C', 'D', 'E', 'F', 'G',                'H',
+        'B', 'C',
+        'S', 'Q',
+        // 'P', 'R'
     };
     // std::vector < uint8_t > input = { 'A', 'B', 'A', 'C' };
     debug::set_log_level(debug::L_DEBUG_FG);
