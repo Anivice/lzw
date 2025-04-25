@@ -1,5 +1,6 @@
 #include "arithmetic.h"
 #include <algorithm>
+#include <ranges>
 #include <stdexcept>
 #include "log.hpp"
 
@@ -15,7 +16,7 @@ void arithmetic::form_symbol_pool_from_input_data()
         symbol_pool_[src]++;
     }
 
-    data_size = input_.size();
+    data_size_ = input_.size();
 }
 
 void arithmetic::form_probability_table_from_existing_symbol_pool()
@@ -23,96 +24,85 @@ void arithmetic::form_probability_table_from_existing_symbol_pool()
     for (const auto &[symbol, occurrence] : symbol_pool_)
     {
         probability_table_[symbol] =
-            static_cast<float_t>(occurrence) / static_cast<float_t>(data_size);
+            static_cast<float_t>(occurrence) / static_cast<float_t>(data_size_);
     }
 }
 
-void arithmetic::form_probability_distribution_from_existing_probability_table()
+void arithmetic::form_probability_distribution_from_existing_probability_table(float_t stage_min, const float_t stage_max)
 {
-    float_t lower_bond = 0.00f;
-    uint8_t last_symbol = 0;
+    probability_distribution_table_.clear();
 
     for (const auto & [symbol, probability] : probability_table_)
     {
+        const auto domain_length = stage_max - stage_min;
+        const auto cumulated_probability = domain_length * probability + stage_min;
         probability_distribution_table_.emplace(std::make_pair(symbol,
-            std::make_pair(lower_bond, lower_bond + probability)));
-        lower_bond += probability;
-        last_symbol = symbol;
-    }
-
-    // should never be used, but Linux **might** fuck this up
-    if (!probability_distribution_table_.empty() && probability_distribution_table_[last_symbol].second != 1) {
-        probability_distribution_table_[last_symbol].second = 1;
+            std::make_pair(stage_min, cumulated_probability)));
+        stage_min = cumulated_probability;
     }
 }
 
 void arithmetic::progressive_symbolization()
 {
-    debug::log(debug::to_stderr, debug::debug_log, "---> Table <---\n", probability_distribution_table_, "\n");
     float_t Low = 0;
     float_t High = 1;
+    output_bits_.clear();
 
     for (const auto & src : input_) {
-        const auto CumulatedLow = probability_distribution_table_[src].first;
-        const auto CumulatedHigh = probability_distribution_table_[src].second;
-        const auto CurrentSymbolRange = High - Low;
-
+        form_probability_distribution_from_existing_probability_table(Low, High);
+        Low = probability_distribution_table_[src].first;
+        High = probability_distribution_table_[src].second;
 
         debug::log(debug::to_stderr, debug::debug_log,
-            "progressive_symbolization(): "
-            "High = ", High, ", Low = ", Low, "\n"
-            "CumulatedHigh = ", std::fixed, std::setprecision(8), CumulatedHigh, "\n"
-            "CumulatedLow = ", std::fixed, std::setprecision(8), CumulatedLow, "\n"
-            "CurrentSymbolRange = ", std::fixed, std::setprecision(8), CurrentSymbolRange, "\n");
+            "progressive_symbolization(): Redistributed interval: [", Low, ", ", High, ")\n");
 
-        High = Low + CurrentSymbolRange * CumulatedHigh;
-        Low = Low + CurrentSymbolRange * CumulatedLow;
-        debug::log(debug::to_stderr, debug::debug_log,
-            "progressive_symbolization(): High = ", std::fixed, std::setprecision(8), High,
-            ", Low = ", std::fixed, std::setprecision(8), Low, "\n");
+        // Renormalize interval if necessary
+        // while (true) {
+        //     if (High < 0.5) {
+        //         // Output 0 and scale interval
+        //         output_bits_.push_back(false);
+        //         Low *= 2;
+        //         High *= 2;
+        //     } else if (Low >= 0.5) {
+        //         // Output 1 and scale interval
+        //         output_bits_.push_back(true);
+        //         Low = 2 * (Low - 0.5);
+        //         High = 2 * (High - 0.5);
+        //     } else if (Low >= 0.25 && High < 0.75) {
+        //         // Apply E3 scaling
+        //         Low = 2 * (Low - 0.25);
+        //         High = 2 * (High - 0.25);
+        //         output_bits_.push_back(false); // Output 0
+        //         output_bits_.push_back(true);  // Followed by 1 (increment)
+        //     } else {
+        //         break; // No more renormalization needed
+        //     }
+        // }
     }
 
-    const auto FinalLowerBound = Low;
-    const auto FinalHighBound = High;
+    form_probability_distribution_from_existing_probability_table(Low, High);
 
-    // !! Floating-Point Precision Can Be a Problem !!
-    const auto float_represent = (FinalLowerBound + FinalHighBound) / 2;
-    auto is_in_range = [&](const uint64_t representing, const uint64_t scale)->bool
+    std::vector<float_t> last_interation_probabilities;
+    last_interation_probabilities.reserve(probability_distribution_table_.size() * 2);
+    for (const auto &[lower, higher]:
+         probability_distribution_table_ | std::views::values)
     {
-        const auto scale_10_based = static_cast<uint64_t>(pow(10, static_cast<double>(scale)));;
-        const auto FinalLowerBoundInt = static_cast<uint64_t>(FinalLowerBound * static_cast<float_t>(scale_10_based));
-        const auto FinalHighBoundInt = static_cast<uint64_t>(FinalHighBound * static_cast<float_t>(scale_10_based));
-        if (FinalLowerBoundInt == FinalHighBoundInt) {
-            return false; // scale too small
-        }
-
-        return (representing > FinalLowerBoundInt) && (representing < FinalHighBoundInt);
-    };
-
-    scale = 1;
-    represent_arithmetic = static_cast<uint64_t>(float_represent * static_cast<float_t>(10));
-    while (!is_in_range(represent_arithmetic, scale))
-    {
-        ++scale;
-        const auto unpacked_scale = static_cast<float_t>(pow(10, static_cast<double>(scale)));
-        const auto new_float_represent = float_represent * unpacked_scale;
-        represent_arithmetic = static_cast<uint64_t>(new_float_represent);
+        last_interation_probabilities.push_back(lower);
+        last_interation_probabilities.push_back(higher);
     }
 
-    represent_float_arithmetic_data = float_represent;
-    debug::log(debug::to_stderr, debug::debug_log, "progressive_symbolization(): represent_float_arithmetic_data: ",
-        represent_float_arithmetic_data, "\n");
+    std::ranges::sort(last_interation_probabilities, std::less());
+    const auto FinalLowerBound = last_interation_probabilities.front();
+    const auto FinalHigherBound = last_interation_probabilities.back();
+    represent_float_arithmetic_data_ = (FinalLowerBound + FinalHigherBound) / 2;
+
+    debug::log(debug::to_stderr,
+        debug::debug_log, "progressive_symbolization(): Redistributed interval: [", Low, ", ", High, ")\n",
+        debug::debug_log, "represent_float_arithmetic_data = ", represent_float_arithmetic_data_, "\n");
 }
 
 void arithmetic::progressive_decoding()
 {
-    debug::log(debug::to_stderr, debug::debug_log, "---> Table <---\n", probability_distribution_table_, "\n");
-
-    const auto unpacked_scale = static_cast<float_t>(pow(10, static_cast<double>(scale)));
-    represent_float_arithmetic_data = static_cast<float_t>(represent_arithmetic) / unpacked_scale; // code
-    float_t Low = 0;
-    float_t High = 1;
-
     // find symbol within given range
     auto find_symbol_within_given_range = [&](const float_t data, uint8_t & result)->bool
     {
@@ -133,20 +123,27 @@ void arithmetic::progressive_decoding()
     };
 
     std::vector<uint8_t> result_stack;
-    result_stack.reserve(data_size);
+    result_stack.reserve(data_size_);
+    float_t Low = 0;
+    float_t High = 1;
+    float_t code = represent_float_arithmetic_data_;
+    // for (const bool bit : output_bits_) {
+    //     code = code * 2.0 + (bit ? 1.0 : 0.0);
+    // }
+    // const float_t scale = 1.0 / static_cast<float_t>(1ULL << output_bits_.size());
+    // code += represent_float_arithmetic_data_ * scale;
+    debug::log(debug::to_stderr, debug::debug_log, "progressive_decoding(): Rescaled code: ", code, "\n");
 
-    for (uint64_t i = 0; i < data_size; i++)
+    for (uint64_t i = 0; i < data_size_; i++)
     {
+        form_probability_distribution_from_existing_probability_table(Low, High);
         debug::log(debug::to_stderr, debug::debug_log,
-            "progressive_decoding(): High = ", std::fixed, std::setprecision(8), High,
-            ", Low = ", std::fixed, std::setprecision(8), Low,
-            ", represent_float_arithmetic_data = ", represent_float_arithmetic_data, "\n");
-        const float_t csr = High - Low;
-        represent_float_arithmetic_data = renormalization_within_range(represent_float_arithmetic_data, Low, csr);
+            "progressive_decoding(): Redistributed interval: [", Low, ", ", High, ")\n");
         uint8_t symbol = 0;
-        if (!find_symbol_within_given_range(represent_float_arithmetic_data, symbol)) {
+        if (!find_symbol_within_given_range(represent_float_arithmetic_data_, symbol)) {
             throw std::invalid_argument("arithmetic::progressive_decoding(): Unresolvable symbol");
         }
+
         result_stack.push_back(symbol);
         High = probability_distribution_table_[symbol].second;
         Low = probability_distribution_table_[symbol].first;
@@ -155,10 +152,10 @@ void arithmetic::progressive_decoding()
     debug::log(debug::to_stderr, debug::debug_log,
         "progressive_decoding(): High = ", std::fixed, std::setprecision(8), High,
         ", Low = ", std::fixed, std::setprecision(8), Low,
-        ", represent_float_arithmetic_data = ", represent_float_arithmetic_data, "\n");
+        ", represent_float_arithmetic_data = ", represent_float_arithmetic_data_, "\n");
 
     // std::ranges::sort(result_stack);
     // std::ranges::reverse(result_stack);
-    output_.reserve(data_size + output_.size());
+    output_.reserve(data_size_ + output_.size());
     output_.insert(output_.end(), result_stack.begin(), result_stack.end());
 }
