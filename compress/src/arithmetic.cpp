@@ -4,12 +4,6 @@
 #include <stdexcept>
 #include "log.hpp"
 
-arithmetic::float_t arithmetic::renormalization_within_range(const float_t data, const float_t low, const float_t csr)
-{
-    constexpr float_t raw_scale = 1;
-    return ((data * raw_scale) - (low * raw_scale)) / (csr * raw_scale);
-}
-
 void arithmetic::form_symbol_pool_from_input_data()
 {
     for (const auto & src : input_) {
@@ -55,29 +49,6 @@ void arithmetic::progressive_symbolization()
 
         debug::log(debug::to_stderr, debug::debug_log,
             "progressive_symbolization(): Redistributed interval: [", Low, ", ", High, ")\n");
-
-        // Renormalize interval if necessary
-        // while (true) {
-        //     if (High < 0.5) {
-        //         // Output 0 and scale interval
-        //         output_bits_.push_back(false);
-        //         Low *= 2;
-        //         High *= 2;
-        //     } else if (Low >= 0.5) {
-        //         // Output 1 and scale interval
-        //         output_bits_.push_back(true);
-        //         Low = 2 * (Low - 0.5);
-        //         High = 2 * (High - 0.5);
-        //     } else if (Low >= 0.25 && High < 0.75) {
-        //         // Apply E3 scaling
-        //         Low = 2 * (Low - 0.25);
-        //         High = 2 * (High - 0.25);
-        //         output_bits_.push_back(false); // Output 0
-        //         output_bits_.push_back(true);  // Followed by 1 (increment)
-        //     } else {
-        //         break; // No more renormalization needed
-        //     }
-        // }
     }
 
     form_probability_distribution_from_existing_probability_table(Low, High);
@@ -126,12 +97,7 @@ void arithmetic::progressive_decoding()
     result_stack.reserve(data_size_);
     float_t Low = 0;
     float_t High = 1;
-    float_t code = represent_float_arithmetic_data_;
-    // for (const bool bit : output_bits_) {
-    //     code = code * 2.0 + (bit ? 1.0 : 0.0);
-    // }
-    // const float_t scale = 1.0 / static_cast<float_t>(1ULL << output_bits_.size());
-    // code += represent_float_arithmetic_data_ * scale;
+    const float_t code = represent_float_arithmetic_data_;
     debug::log(debug::to_stderr, debug::debug_log, "progressive_decoding(): Rescaled code: ", code, "\n");
 
     for (uint64_t i = 0; i < data_size_; i++)
@@ -154,8 +120,6 @@ void arithmetic::progressive_decoding()
         ", Low = ", std::fixed, std::setprecision(8), Low,
         ", represent_float_arithmetic_data = ", represent_float_arithmetic_data_, "\n");
 
-    // std::ranges::sort(result_stack);
-    // std::ranges::reverse(result_stack);
     output_.reserve(data_size_ + output_.size());
     output_.insert(output_.end(), result_stack.begin(), result_stack.end());
 }

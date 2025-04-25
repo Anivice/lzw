@@ -14,71 +14,11 @@ private:
     std::string frac = std::string(2, '0');
     bool is_one = false;
 
-    static void assert_valid_char(const char c)
-    {
-        if (!((c >= '0') && (c <= '9'))) {
-            throw std::invalid_argument("absolute_precision_type::assert_valid_char(): Invalid numerical data");
-        }
-    }
-
-    static char add(char left, char right, bool & carry)
-    {
-        assert_valid_char(left);
-        assert_valid_char(right);
-
-        left -= '0';
-        right -= '0';
-
-        char result = static_cast<char>(left + right);
-        if (result >= 10) {
-            result -= 10;
-            carry = true;
-        } else {
-            carry = false;
-        }
-
-        return static_cast<char>(result + '0');
-    }
-
-    static char sub(char left, char right, bool & carry)
-    {
-        assert_valid_char(left);
-        assert_valid_char(right);
-
-        left -= '0';
-        right -= '0';
-
-        char result = static_cast<char>(left - right);
-        if (result < 0) {
-            result += 10;
-            carry = true;
-        } else {
-            carry = false;
-        }
-
-        return static_cast<char>(result + '0');
-    }
-
-    static void padding_string_len(std::string & str1, std::string & str2)
-    {
-        const auto max = std::max(str1.size(), str2.size());
-        const auto padding_on_str1 = max - str1.size();
-        const auto padding_on_str2 = max - str2.size();
-
-        str1.insert(str1.end(), padding_on_str1, '0');
-        str2.insert(str2.end(), padding_on_str2, '0');
-    }
-
-    void trim()
-    {
-        for (int64_t i = frac.size() - 1; i >= 0; i--) {
-            if (frac[i] == '0') {
-                frac.pop_back();
-            } else {
-                return;
-            }
-        }
-    }
+    static void assert_valid_char(char c);
+    static char add(char left, char right, bool & carry);
+    static char sub(char left, char right, bool & carry);
+    static void padding_string_len(std::string & str1, std::string & str2);
+    void trim();
 
 public:
     absolute_precision_type() = default;
@@ -89,15 +29,11 @@ public:
     absolute_precision_type operator+(const absolute_precision_type&) const;
     absolute_precision_type operator-(const absolute_precision_type&) const;
     absolute_precision_type operator*(const absolute_precision_type&) const;
-    absolute_precision_type operator/(const absolute_precision_type&) const;
-    absolute_precision_type operator%(const absolute_precision_type&) const;
+    absolute_precision_type operator/(uint64_t) const;
     absolute_precision_type & operator+=(const absolute_precision_type&);
     absolute_precision_type & operator-=(const absolute_precision_type&);
     absolute_precision_type & operator*=(const absolute_precision_type&);
-    absolute_precision_type & operator/=(const absolute_precision_type&);
-    absolute_precision_type & operator%=(const absolute_precision_type&);
-    absolute_precision_type & operator++(int);
-    absolute_precision_type & operator--(int);
+    absolute_precision_type & operator/=(uint64_t);
 
     bool operator==(const absolute_precision_type&) const;
     bool operator!=(const absolute_precision_type&) const;

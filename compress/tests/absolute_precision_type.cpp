@@ -3,12 +3,16 @@
 
 int main()
 {
-    absolute_precision_type num1, num2, num3;
-    num1 = absolute_precision_type::make_absolute_precision_type("1");
-    num2 = absolute_precision_type::make_absolute_precision_type("0.288289013214");
-    num3 = absolute_precision_type::make_absolute_precision_type("0.112233344553321");
+    absolute_precision_type num1 = absolute_precision_type::make_absolute_precision_type("1");
+    absolute_precision_type num2 = absolute_precision_type::make_absolute_precision_type("0.288289013214");
+    absolute_precision_type num3 = absolute_precision_type::make_absolute_precision_type("0.112233344553321");
+    absolute_precision_type num4 = absolute_precision_type::make_absolute_precision_type("0.74213211311111111111111111111");
+    auto num5 = (num4 - num2 * num3);
 
     std::cout << num1.to_string() << std::endl;
     std::cout << num2.to_string() << std::endl;
-    std::cout << (num2 * num3).to_string() << std::endl;
+    std::cout << num3.to_string() << std::endl;
+    std::cout << num4.to_string() << std::endl;
+    std::cout << num5.to_string() << std::endl;
+    std::cout << (num4 / 3).to_string() << std::endl;
 }

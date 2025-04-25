@@ -24,8 +24,6 @@ private:
     uint64_t data_size_{};
     float_t represent_float_arithmetic_data_{};
 
-    static float_t renormalization_within_range(float_t, float_t, float_t);
-
 public:
     arithmetic(std::vector < uint8_t > input, std::vector < uint8_t > & output)
         : input_(std::move(input)), output_(output) { }

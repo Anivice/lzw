@@ -1,5 +1,71 @@
 #include "absolute_precision_type.h"
 
+void absolute_precision_type::assert_valid_char(const char c)
+{
+    if (!((c >= '0') && (c <= '9'))) {
+        throw std::invalid_argument("absolute_precision_type::assert_valid_char(): Invalid numerical data");
+    }
+}
+
+char absolute_precision_type::add(char left, char right, bool & carry)
+{
+    assert_valid_char(left);
+    assert_valid_char(right);
+
+    left -= '0';
+    right -= '0';
+
+    char result = static_cast<char>(left + right);
+    if (result >= 10) {
+        result -= 10;
+        carry = true;
+    } else {
+        carry = false;
+    }
+
+    return static_cast<char>(result + '0');
+}
+
+char absolute_precision_type::sub(char left, char right, bool & carry)
+{
+    assert_valid_char(left);
+    assert_valid_char(right);
+
+    left -= '0';
+    right -= '0';
+
+    char result = static_cast<char>(left - right);
+    if (result < 0) {
+        result += 10;
+        carry = true;
+    } else {
+        carry = false;
+    }
+
+    return static_cast<char>(result + '0');
+}
+
+void absolute_precision_type::padding_string_len(std::string & str1, std::string & str2)
+{
+    const auto max = std::max(str1.size(), str2.size());
+    const auto padding_on_str1 = max - str1.size();
+    const auto padding_on_str2 = max - str2.size();
+
+    str1.insert(str1.end(), padding_on_str1, '0');
+    str2.insert(str2.end(), padding_on_str2, '0');
+}
+
+void absolute_precision_type::trim()
+{
+    for (auto i = static_cast<int64_t>(frac.size() - 1); i >= 0; i--) {
+        if (frac[i] == '0') {
+            frac.pop_back();
+        } else {
+            return;
+        }
+    }
+}
+
 absolute_precision_type absolute_precision_type::operator+(
 const absolute_precision_type & other_) const
 {
@@ -41,6 +107,7 @@ const absolute_precision_type & other_) const
             "Precision level exceeded for number exceeding 1");
     }
 
+    ret.trim();
     return ret;
 }
 
@@ -74,6 +141,7 @@ absolute_precision_type absolute_precision_type::operator-(
         }
     }
 
+    ret.trim();
     return ret;
 }
 
@@ -151,12 +219,12 @@ absolute_precision_type absolute_precision_type::operator*(
     absolute_precision_type shorter = (this_.frac.size() < that_.frac.size() ? this_ : that_);
     absolute_precision_type longer = (this_.frac.size() > that_.frac.size() ? this_ : that_);
 
-    for (int64_t i = shorter.frac.size() - 1; i >= 0; --i)
+    for (auto i = static_cast<int64_t>(shorter.frac.size() - 1); i >= 0; --i)
     {
         std::string current_result;
         char last_mul_carry = '0';
         const auto sig = shorter.frac[i];
-        for (int64_t j = longer.frac.size() - 1; j >= 0; --j)
+        for (auto j = static_cast<int64_t>(longer.frac.size() - 1); j >= 0; --j)
         {
             const auto other_sig = longer.frac[j];
             char singleton = '0';
@@ -203,6 +271,177 @@ absolute_precision_type absolute_precision_type::operator*(
     ret.is_one = false;
     ret.trim();
     return ret;
+}
+
+absolute_precision_type absolute_precision_type::operator/(const uint64_t other_) const
+{
+    if (other_ == 1) {
+        return *this;
+    }
+
+    auto balance = [](std::string & left, std::string & right)
+    {
+        const auto max = std::max(left.size(), right.size());
+        left.insert(left.begin(), max - left.size(), '0');
+        right.insert(right.begin(), max - right.size(), '0');
+    };
+
+    auto ulltostr = [](uint64_t data)->std::string
+    {
+        std::string ret;
+        while (data != 0) {
+            ret += std::to_string(data % 10);
+            data /= 10;
+        }
+
+        return ret;
+    };
+
+    // if left > right?
+    auto larger_than = [](const std::string& left, const std::string& right)->bool
+    {
+        const auto left_literal = strtoll(left.c_str(), nullptr, 10);
+        const auto right_literal = strtoll(right.c_str(), nullptr, 10);
+        return left_literal > right_literal;
+    };
+
+    // wrap to CPU binary calculation
+    auto mod = [&ulltostr](
+        const std::string& target,
+        const std::string& divisor,
+        std::string & result,
+        std::string & remainder)->bool
+    {
+        const auto target_literal = std::strtoull(target.c_str(), nullptr, 10);
+        const auto divisor_literal = std::strtoull(divisor.c_str(), nullptr, 10);
+        result = ulltostr(target_literal / divisor_literal);
+        remainder = ulltostr(target_literal % divisor_literal);
+        return target_literal % divisor_literal == 0;
+    };
+
+    auto this_ = (this->is_one ? std::string(64, '9') : this->frac);
+    auto const_this_ = this_;
+    std::string that_ = ulltostr(other_);
+
+    std::string result;
+    uint64_t index = 0;
+    const auto max_result_size = const_this_.size() * 4;
+    std::string current_session_target;
+
+    while (true)
+    {
+        if (result.size() > max_result_size) {
+            break;
+        }
+
+        current_session_target += const_this_[index];
+        index++;
+        if (!larger_than(current_session_target, that_))
+        {
+            result += '0';
+            if (index > const_this_.size()) {
+                const_this_ += '0'; // padding
+            }
+        } else {
+            std::string remainder, quo;
+            balance(current_session_target, that_);
+            const auto reminder_is_zero = mod(current_session_target, that_, quo, remainder);
+            result += quo;
+            if (!reminder_is_zero) {
+                current_session_target = remainder;
+            } else if (index == const_this_.size()) {
+                break;
+            } else {
+                current_session_target.clear();
+            }
+        }
+    }
+
+    absolute_precision_type ret;
+    ret.frac = result;
+    ret.is_one = false;
+    ret.trim();
+    return ret;
+}
+
+absolute_precision_type & absolute_precision_type::operator+=(const absolute_precision_type & other)
+{
+    *this = this->operator+(other);
+    return *this;
+}
+
+absolute_precision_type & absolute_precision_type::operator-=(const absolute_precision_type & other)
+{
+    *this = this->operator-(other);
+    return *this;
+}
+
+absolute_precision_type & absolute_precision_type::operator*=(const absolute_precision_type & other)
+{
+    *this = this->operator*(other);
+    return *this;
+}
+
+absolute_precision_type & absolute_precision_type::operator/=(const uint64_t other)
+{
+    *this = this->operator/(other);
+    return *this;
+}
+
+bool absolute_precision_type::operator==(const absolute_precision_type & other) const
+{
+    auto this_ = *this;
+    auto other_ = other;
+
+    this_.trim();
+    other_.trim();
+
+    return (this_.frac == other_.frac) && (this_.is_one == other_.is_one);
+}
+
+bool absolute_precision_type::operator!=(const absolute_precision_type & other) const
+{
+    return !(*this == other);
+}
+
+bool absolute_precision_type::operator<(const absolute_precision_type & other) const
+{
+    if (this->is_one) {
+        return false;
+    } else if (other.is_one) {
+        return true;
+    }
+
+    auto this_ = *this;
+    auto other_ = other;
+
+    this_.trim();
+    other_.trim();
+
+    padding_string_len(this_.frac, other_.frac);
+    for (auto i = static_cast<int64_t>(this_.frac.size() - 1); i >= 0; --i)
+    {
+        if (this_.frac[i] > other_.frac[i]) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool absolute_precision_type::operator>(const absolute_precision_type & other) const
+{
+    return !((*this < other) && (*this == other));
+}
+
+bool absolute_precision_type::operator<=(const absolute_precision_type & other) const
+{
+    return !(other > *this);
+}
+
+bool absolute_precision_type::operator>=(const absolute_precision_type & other) const
+{
+    return !(other < *this);
 }
 
 std::string absolute_precision_type::to_string() const {
