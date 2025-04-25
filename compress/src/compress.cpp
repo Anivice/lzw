@@ -28,6 +28,7 @@
 #include <chrono>
 #include <filesystem>
 #include <ranges>
+#include <cmath>
 
 namespace fs = std::filesystem;
 
