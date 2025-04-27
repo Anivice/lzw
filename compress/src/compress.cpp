@@ -472,11 +472,11 @@ int main(const int argc, const char** argv)
                 debug::log(debug::to_stderr, debug::info_log, " - LZW blocks:     ", lzw_compressed_blocks, "\n");
                 debug::log(debug::to_stderr, debug::info_log, " - Huffman blocks: ", huffman_compressed_blocks, "\n");
                 debug::log(debug::to_stderr, debug::info_log, "Raw blocks:        ", raw_blocks, "\n");
-                debug::log(debug::to_stderr, debug::info_log, "C/R ratio:         ", std::fixed, std::setprecision(6), CRRatio, "\n");
+                debug::log(debug::to_stderr, debug::info_log, "C/R ratio:         ", std::fixed, std::setprecision(4), CRRatio * 100, "\n");
                 debug::log(debug::to_stderr, debug::info_log, "C/A percentage:    ", std::fixed, std::setprecision(4), CAPercentage, "% \n");
                 debug::log(debug::to_stderr, debug::info_log, "Raw data entropy:  ", std::fixed, std::setprecision(4), entropy, "\n");
                 debug::log(debug::to_stderr, debug::info_log, "Expectation:       ", numerical_bits_expectation, " Bits\n");
-                debug::log(debug::to_stderr, debug::info_log, "AB/EB percentage:  ", expectation_ratio * 100, " %\n");
+                debug::log(debug::to_stderr, debug::info_log, "AB/EB percentage:  ", expectation_ratio * 100, "%\n");
                 debug::log(debug::to_stderr, debug::info_log, "Performance:       ", performance, "\n");
             }
         };
