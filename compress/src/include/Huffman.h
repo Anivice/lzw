@@ -92,8 +92,6 @@ public:
 
     void compress();
     void decompress();
-
-    [[nodiscard]] frequency_map get_frequency_map() const { return frequency_map_; }
 };
 
 #endif //HUFFMAN_H

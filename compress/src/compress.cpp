@@ -23,6 +23,7 @@
 #include "lzw.h"
 #include "utils.h"
 #include "Huffman.h"
+#include "arithmetic.h"
 #include <fstream>
 #include <thread>
 #include <chrono>
@@ -99,17 +100,52 @@ std::atomic < unsigned > thread_count = 1;
 std::atomic < bool > verbose = false;
 std::atomic < uint64_t > lzw_compressed_blocks = 0;
 std::atomic < uint64_t > huffman_compressed_blocks = 0;
+std::atomic < uint64_t > arithmetic_compressed_blocks = 0;
 std::atomic < uint64_t > raw_blocks = 0;
 std::atomic < bool > disable_lzw = false;
 std::atomic < bool > disable_huffman = false;
-std::map <uint8_t, uint64_t> frequency_map;
+std::atomic < bool > disable_arithmetic = false;
+std::map <uint8_t, uint64_t> global_frequency_map;
+
+long double entropy_of(const std::vector<uint8_t>& data, std::map <uint8_t, uint64_t> & frequency_map)
+{
+    for (const auto & code : data) {
+        frequency_map[code]++;
+    }
+
+    uint64_t total_tokens = 0;
+    for (const auto & freq: frequency_map | std::views::values) {
+        total_tokens += freq;
+    }
+
+    std::vector < long double > EntropyList;
+    EntropyList.reserve(256);
+    for (const auto & freq: frequency_map | std::views::values) {
+        const auto prob = static_cast<long double>(freq) / static_cast<long double>(total_tokens);
+        EntropyList.push_back(prob * log2l(prob));
+    }
+
+    long double entropy = 0;
+    for (const auto & entropy_sig: EntropyList) {
+        entropy += entropy_sig;
+    }
+    entropy = -entropy;
+    return entropy;
+}
 
 void compress_on_one_block(std::vector<uint8_t> * in_buffer, std::vector<uint8_t> * out_buffer)
 {
     std::vector < uint8_t >
         buffer_lzw = *in_buffer, buffer_lzw_output,
-        buffer_huffman = *in_buffer, buffer_huffman_lzw_output;
+        buffer_huffman = *in_buffer, buffer_huffman_lzw_output,
+        buffer_arithmetic = *in_buffer, buffer_arithmetic_output;
     std::thread huffman_thread;
+
+    if (verbose) {
+        for (const auto & symbol : *in_buffer) {
+            global_frequency_map[symbol]++;
+        }
+    }
 
     auto LZW9Compress = [](std::vector<uint8_t> & input, std::vector<uint8_t> & output)->uint16_t
     {
@@ -125,21 +161,27 @@ void compress_on_one_block(std::vector<uint8_t> * in_buffer, std::vector<uint8_t
         return data_len_lzw;
     };
 
-    auto HuffmanCompress = [](std::vector<uint8_t> & input, std::vector<uint8_t> & output)->uint16_t {
+    auto HuffmanCompress = [](std::vector<uint8_t> & input, std::vector<uint8_t> & output)->uint16_t
+    {
         // try huffman
         Huffman huffmanCompressor(input, output);
         huffmanCompressor.compress();
-
-        if (verbose) {
-            for (const auto freq_map = huffmanCompressor.get_frequency_map();
-                const auto & [symbol, freq] : freq_map)
-            {
-                frequency_map[symbol] += freq;
-            }
-        }
-
         const auto data_len_huffman = static_cast<uint16_t>(output.size());
         return data_len_huffman;
+    };
+
+    auto ArithmeticCompress = [](std::vector<uint8_t> & input, std::vector<uint8_t> & output)->uint16_t
+    {
+        std::stringstream input_stream, output_stream;
+        input_stream.write(reinterpret_cast<char*>(input.data()), static_cast<std::streamsize>(input.size()));
+        arithmetic::Encode compressor(input_stream, output_stream);
+        compressor.encode();
+        std::string dump = output_stream.str();
+        const auto data_len_arithmetic = static_cast<uint16_t>(dump.size());
+        output.push_back(((uint8_t*)&data_len_arithmetic)[0]);
+        output.push_back(((uint8_t*)&data_len_arithmetic)[1]);
+        output.insert(end(output), begin(dump), end(dump));
+        return data_len_arithmetic;
     };
 
     auto compression_huffman_block = [&]()->void
@@ -151,14 +193,25 @@ void compress_on_one_block(std::vector<uint8_t> * in_buffer, std::vector<uint8_t
         LZW9Compress(buffer_huffman_output, buffer_huffman_lzw_output);
     };
 
-    if (!disable_huffman) {
+    bool disable_compression = false;
+    std::map <uint8_t, uint64_t> freq_map;
+    if (const auto current_entropy = entropy_of(*in_buffer, freq_map);
+        current_entropy > 7)
+    {
+        disable_compression = true;
+    }
+
+    if (!disable_compression && !disable_huffman) {
         huffman_thread = std::thread(compression_huffman_block);
     }
 
-    if (!disable_lzw)
-    {
+    if (!disable_compression && !disable_lzw) {
         // Plain LZW
         LZW9Compress(buffer_lzw, buffer_lzw_output);
+    }
+
+    if (!disable_compression && !disable_arithmetic) {
+        ArithmeticCompress(buffer_arithmetic, buffer_arithmetic_output);
     }
 
     // external huffman calculation
@@ -166,24 +219,25 @@ void compress_on_one_block(std::vector<uint8_t> * in_buffer, std::vector<uint8_t
         huffman_thread.join();
     }
 
-    uint64_t compressed_data_size
-        = std::min(buffer_huffman_lzw_output.size(), buffer_lzw_output.size());
+    std::vector < std::pair < uint64_t, uint8_t > > size_map;
+    size_map.emplace_back(buffer_huffman_lzw_output.size(), used_huffman);
+    size_map.emplace_back(buffer_lzw_output.size(), used_lzw);
+    size_map.emplace_back(buffer_arithmetic_output.size(), used_arithmetic);
 
-    uint8_t compression_method =
-        buffer_huffman_lzw_output.size() > buffer_lzw_output.size() ? used_lzw : used_huffman;
+    std::erase_if(size_map, []
+        (const std::pair < uint64_t, uint8_t > & left)->bool
+    {
+        return left.first == 0;
+    });
 
-    if (disable_lzw && !disable_huffman) {
-        compressed_data_size = buffer_huffman_lzw_output.size();
-        compression_method = used_huffman;
-    } else if (!disable_lzw && disable_huffman) {
-        compressed_data_size = buffer_lzw_output.size();
-        compression_method = used_lzw;
-    } else if (disable_huffman && disable_lzw) {
-        compressed_data_size = UINT64_MAX;
-        compression_method = 0;
-    } // else? default
+    std::ranges::sort(size_map, []
+        (const std::pair < uint64_t, uint8_t > & left, const std::pair < uint64_t, uint8_t > & right) -> bool
+    {
+        return left.first < right.first;
+    });
 
-    if (compressed_data_size >= in_buffer->size()) // data expanded
+    const uint8_t compression_method = size_map.empty() ? used_plain : size_map.front().second;
+    if (compression_method == used_plain) // data expanded
     {
         out_buffer->push_back(used_plain);
         const auto raw_block_size = static_cast<uint16_t>(in_buffer->size());
@@ -206,7 +260,13 @@ void compress_on_one_block(std::vector<uint8_t> * in_buffer, std::vector<uint8_t
                 begin(buffer_huffman_lzw_output), end(buffer_huffman_lzw_output));
             in_buffer->clear();
             ++huffman_compressed_blocks;
-        } else // WTF?
+        } else if (compression_method == used_arithmetic) {
+            out_buffer->insert(end(*out_buffer),
+                begin(buffer_arithmetic_output), end(buffer_arithmetic_output));
+            in_buffer->clear();
+            ++arithmetic_compressed_blocks;
+        }
+        else // WTF?
         {
             throw std::runtime_error("Invalid compression method, likely internal BUG");
         }
@@ -412,24 +472,7 @@ int main(const int argc, const char** argv)
         {
             if (verbose && processed_size > 0)
             {
-                uint64_t total_tokens = 0;
-                for (const auto & freq: frequency_map | std::views::values) {
-                    total_tokens += freq;
-                }
-
-                std::vector < long double > EntropyList;
-                EntropyList.reserve(256);
-                for (const auto & freq: frequency_map | std::views::values) {
-                    const auto prob = static_cast<long double>(freq) / static_cast<long double>(total_tokens);
-                    EntropyList.push_back(prob * log2l(prob));
-                }
-
-                long double entropy = 0;
-                for (const auto & entropy_sig: EntropyList) {
-                    entropy += entropy_sig;
-                }
-                entropy = -entropy;
-
+                const auto entropy = entropy_of({}, global_frequency_map);
                 const auto expectation = static_cast<long double>(processed_size) * entropy;
                 auto expectation_int = static_cast<uint64_t>(expectation);
                 if (expectation - static_cast<long double>(expectation_int) > 0) {
@@ -440,8 +483,8 @@ int main(const int argc, const char** argv)
                 const auto actual_used_bits = compressed_size * 8;
                 const auto expectation_ratio = (numerical_bits_expectation != 0 ?
                     static_cast<long double>(actual_used_bits) / static_cast<long double>(numerical_bits_expectation) : NAN);
-                const auto total_blocks = lzw_compressed_blocks + huffman_compressed_blocks + raw_blocks;
-                const auto compressed_blocks = lzw_compressed_blocks + huffman_compressed_blocks;
+                const auto total_blocks = lzw_compressed_blocks + huffman_compressed_blocks + arithmetic_compressed_blocks + raw_blocks;
+                const auto compressed_blocks = lzw_compressed_blocks + huffman_compressed_blocks + arithmetic_compressed_blocks;
                 const auto compression_ratio = (static_cast<double>(processed_size) - static_cast<double>(compressed_size)) / static_cast<double>(processed_size);
                 const auto CORatio = static_cast<double>(compressed_size) / static_cast<double>(processed_size);
                 const auto CRRatio = (raw_blocks != 0 ? static_cast<double>(compressed_blocks) / static_cast<double>(raw_blocks) : NAN);
@@ -471,6 +514,7 @@ int main(const int argc, const char** argv)
                 debug::log(debug::to_stderr, debug::info_log, "Compressed blocks: ", compressed_blocks, "\n");
                 debug::log(debug::to_stderr, debug::info_log, " - LZW blocks:     ", lzw_compressed_blocks, "\n");
                 debug::log(debug::to_stderr, debug::info_log, " - Huffman blocks: ", huffman_compressed_blocks, "\n");
+                debug::log(debug::to_stderr, debug::info_log, " - Arithmetic blk: ", arithmetic_compressed_blocks, "\n");
                 debug::log(debug::to_stderr, debug::info_log, "Raw blocks:        ", raw_blocks, "\n");
                 debug::log(debug::to_stderr, debug::info_log, "C/R ratio:         ", std::fixed, std::setprecision(4), CRRatio * 100, "\n");
                 debug::log(debug::to_stderr, debug::info_log, "C/A percentage:    ", std::fixed, std::setprecision(4), CAPercentage, "% \n");

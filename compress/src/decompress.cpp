@@ -28,6 +28,8 @@
 #include "Huffman.h"
 #include <filesystem>
 
+#include "arithmetic.h"
+
 namespace fs = std::filesystem;
 
 Arguments::predefined_args_t arguments = {
@@ -101,10 +103,6 @@ bool decompress(std::basic_istream<char>& input, std::basic_ostream<char>& outpu
         input.read(reinterpret_cast<char*>(&method), sizeof(method));
         BUFFER_HEALTH_CHECK(input, in_buffer.second);
 
-        if (method != used_lzw && method != used_huffman && method != 0) {
-            throw std::runtime_error("Unknown compression method, corrupted data?");
-        }
-
         auto read_lzw_block = [&]()->bool
         {
             // 1, read LZW block size
@@ -147,6 +145,22 @@ bool decompress(std::basic_istream<char>& input, std::basic_ostream<char>& outpu
             // 2. modify method
             in_buffer.first = used_huffman;
         }
+        else if (method == used_arithmetic)
+        {
+            in_buffer.first = used_arithmetic;
+            uint16_t Block_size = 0;
+            input.read(reinterpret_cast<char*>(&Block_size), sizeof(uint16_t));
+            if (!input.good()) {
+                in_buffer.second.clear();
+                return false;
+            }
+
+            in_buffer.second.resize(Block_size);
+            input.read(reinterpret_cast<char*>(in_buffer.second.data()), Block_size);
+            if (const auto actual_size = input.gcount(); actual_size != Block_size) {
+                throw std::runtime_error("Short read on block, corrupted data?");
+            }
+        }
         else if (method == used_plain) // compression sucks for this data, and original data is actually fucking shorter
         {
             // just fucking read it
@@ -186,6 +200,19 @@ bool decompress(std::basic_istream<char>& input, std::basic_ostream<char>& outpu
         HuffmanDecompressor.decompress();
     };
 
+    auto decompress_arithmetic_block = [&](std::vector < uint8_t > * in_buffer,
+    std::vector < uint8_t > * out_buffer)->void
+    {
+        processed_size += in_buffer->size();
+        std::stringstream input_stream, output_stream;
+        input_stream.write(reinterpret_cast<char*>(in_buffer->data()), static_cast<std::streamsize>(in_buffer->size()));
+        arithmetic::Decode decompressor(input_stream, output_stream);
+        decompressor.decode();
+        const auto dump = output_stream.str();
+        out_buffer->reserve(dump.size() + out_buffer->size());
+        out_buffer->insert(out_buffer->end(), dump.begin(), dump.end());
+    };
+
     auto raw_copy_over = [&](std::vector < uint8_t > * in_buffer,
     std::vector < uint8_t > * out_buffer)->void
     {
@@ -203,6 +230,8 @@ bool decompress(std::basic_istream<char>& input, std::basic_ostream<char>& outpu
                 threads.emplace_back(decompress_lzw_block, &in_buffers[i].second, &out_buffers[i]);
             } else if (in_buffers[i].first == used_huffman) {
                 threads.emplace_back(decompress_huffman_lzw_block, &in_buffers[i].second, &out_buffers[i]);
+            } else if (in_buffers[i].first == used_arithmetic) {
+                threads.emplace_back(decompress_arithmetic_block, &in_buffers[i].second, &out_buffers[i]);
             } else if (in_buffers[i].first == used_plain) {
                 threads.emplace_back(raw_copy_over, &in_buffers[i].second, &out_buffers[i]);
             } else {
