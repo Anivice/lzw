@@ -295,9 +295,9 @@ void compress_on_one_block(const std::vector<uint8_t> * in_buffer, std::vector<u
         thread_compression.emplace_back(compression_arithmetic_block);
     }
 
-    if (disable_compression) {
-        no_compression();
-    }
+    // if (disable_compression) {
+    no_compression();
+    // }
 
     // external huffman calculation
    for (auto & thread : thread_compression) {
@@ -445,7 +445,7 @@ void compress_file(const std::string& in, const std::string& out)
     seconds_left_sample_space.reserve(sample_size);
     auto add_sample = [&](const uint64_t sample)->void
     {
-        if (seconds_left_sample_space.size() < sample_size) {
+        if (seconds_left_sample_space.size() <= sample_size) {
             seconds_left_sample_space.push_back(sample);
         } else {
             seconds_left_sample_space.erase(seconds_left_sample_space.begin());
