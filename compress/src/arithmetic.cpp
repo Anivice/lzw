@@ -18,8 +18,10 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include "arithmetic.h"
 #include <algorithm>
+#include "arithmetic.h"
+#include <cstdio>
+#include <cstdint>
 
 using namespace arithmetic;
 

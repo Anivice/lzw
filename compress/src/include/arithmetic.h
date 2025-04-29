@@ -22,6 +22,8 @@
 #define ARITHMETIC_H
 
 #include <vector>
+#include <cstdio>
+#include <cstdint>
 
 namespace arithmetic
 {

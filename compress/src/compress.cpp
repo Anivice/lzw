@@ -139,7 +139,7 @@ long double entropy_of(const std::vector<uint8_t>& data, std::map <uint8_t, uint
     return entropy;
 }
 
-void compress_on_one_block(std::vector<uint8_t> * in_buffer, std::vector<uint8_t> * out_buffer)
+void compress_on_one_block(const std::vector<uint8_t> * in_buffer, std::vector<uint8_t> * out_buffer)
 {
     std::vector < std::pair < std::vector<uint8_t> , uint8_t > > size_map;
     std::mutex mutex_in, mutex_out;
@@ -170,7 +170,7 @@ void compress_on_one_block(std::vector<uint8_t> * in_buffer, std::vector<uint8_t
         huffmanCompressor.compress();
     };
 
-    auto ArithmeticCompress = [](std::vector<uint8_t> & input, std::vector<uint8_t> & output)->void
+    auto ArithmeticCompress = [](const std::vector<uint8_t> & input, std::vector<uint8_t> & output)->void
     {
         std::vector<uint8_t> in = input, out;
         arithmetic::Encode compressor(in, out);

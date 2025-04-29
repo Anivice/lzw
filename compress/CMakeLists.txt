@@ -55,8 +55,11 @@ add_library(external STATIC
 
 add_executable(compress src/compress.cpp)
 add_executable(decompress src/decompress.cpp)
+add_executable(entropy src/entropy.cpp)
+
 target_link_libraries(compress PRIVATE external)
 target_link_libraries(decompress PRIVATE external)
+target_link_libraries(entropy PRIVATE external)
 
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
     add_executable(bitwise tests/bitwise.cpp
