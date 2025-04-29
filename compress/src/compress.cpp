@@ -100,6 +100,12 @@ Arguments::predefined_args_t arguments = {
         .value_required = true,
         .explanation = "Set block size (in bytes, default 16384 (16KB), 32767 Max (32KB - 1))"
     },
+    Arguments::single_arg_t {
+        .name = "entropy-threshold",
+        .short_name = 'E',
+        .value_required = true,
+        .explanation = "Set entropy threshold within [0, 8]"
+    },
 };
 
 std::atomic < unsigned > thread_count = 1;
@@ -112,6 +118,7 @@ std::atomic < bool > disable_lzw = false;
 std::atomic < bool > disable_huffman = false;
 std::atomic < bool > disable_arithmetic = false;
 std::map <uint8_t, uint64_t> global_frequency_map;
+std::atomic < float > entropy_threshold = 7.5;
 
 long double entropy_of(const std::vector<uint8_t>& data, std::map <uint8_t, uint64_t> & frequency_map)
 {
@@ -266,7 +273,7 @@ void compress_on_one_block(const std::vector<uint8_t> * in_buffer, std::vector<u
     {
         std::map <uint8_t, uint64_t> freq_map;
         if (const auto current_entropy = entropy_of(*in_buffer, freq_map);
-            current_entropy > 7)
+            current_entropy > entropy_threshold)
         {
             disable_compression = true;
         }
@@ -639,7 +646,18 @@ int main(const int argc, const char** argv)
                 static_cast<Arguments::args_t>(args).at("block-size").back();
             BLOCK_SIZE = static_cast<uint16_t>(std::strtoul(block_size_literal.c_str(), nullptr, 10));
             if (BLOCK_SIZE > BLOCK_SIZE_MAX) {
-                throw std::runtime_error("Block size too large, maximum " + std::to_string(BLOCK_SIZE_MAX) + " Bytes\n");
+                throw std::runtime_error("Block size too large, maximum " + std::to_string(BLOCK_SIZE_MAX) + " Bytes");
+            }
+        }
+
+        if (static_cast<Arguments::args_t>(args).contains("entropy-threshold"))
+        {
+            const auto entropy_threshold_literal =
+                static_cast<Arguments::args_t>(args).at("entropy-threshold").back();
+            entropy_threshold = std::strtof(entropy_threshold_literal.c_str(), nullptr);
+            if (entropy_threshold < 0 or entropy_threshold > 8) {
+                throw std::runtime_error("Invalid entropy threshold " + std::to_string(entropy_threshold)
+                    + ": Threshold is within the interval [0, 8]");
             }
         }
 

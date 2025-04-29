@@ -3,13 +3,13 @@
 ## Introduction
 
 This is an implementation of the two well-known and widely deployed compression algorithms,
-namely Lempel-Ziv-Welch (LZW) and Huffman coding.
+namely Lempel-Ziv-Welch (LZW) and Huffman Coding.
 
 Lempel-Ziv-Welchm, or LZW in short for the sake of convenience naming,
 typically employs a fixed bit size for the result in its coding style,
 though the coding algorithm never specifically detailed any bit size and varying bit length 
 in encoded data is fairly common.
-Huffman coding, on the other hand, is known for its varying bit length in encoded data.
+Huffman Coding, on the other hand, is known for its varying bit length in encoded data.
 
 This implementation mixes these two algorithms in the hope that it can reach
 the maximum compression result possible.
@@ -46,11 +46,11 @@ LZW algorithm is most suitable for data with repeated symbol patterns.
 
 ### Huffman Coding
 
-Huffman coding is a well-known coding algorithm with variable coding length.
+Huffman Coding is a well-known coding algorithm with variable coding length.
 It is suitable for data with huge variety in appearance frequency for its symbols.
 High frequency data are encoded with shorter bits and low frequency data are encoded with longer codes,
 resulting in fewer bits used in general.
-Huffman coding requires a dictionary in the decoding process.
+Huffman Coding requires a dictionary in the decoding process.
 
 ### Compression Ratio
 
@@ -65,7 +65,7 @@ an extremely poor result.
 
 ## Implementations
 
-Huffman coding sorts symbols in frequency order.
+Huffman Coding sorts symbols in frequency order.
 This is not ideal for dictionary storage since,
 dictionary is exported with a fixed-length header.
 In this example, we used four (4) bits for each symbol entry length.
@@ -78,10 +78,10 @@ in additional to the frequency sorting.
 We assign symbols with low frequency first if the symbol typically has shorter encoding.
 This way we decreased the possibility of encountering a symbol with non-ideal bit length.
 
-This is also the reason why Huffman coding in our example always underperformed LZW
+This is also the reason why Huffman Coding in our example always underperformed LZW
 in almost every example.
-As a compensation for this, we compress the result of Huffman coding again, with LZW.
-This helps further reduce redundancies in the Huffman coding result.
+As a compensation for this, we compress the result of Huffman Coding again, with LZW.
+This helps further reduce redundancies in the Huffman Coding result.
 
 However, some patterns are still more likely to have a higher compression ratio for LZW.
 In this implementation, we did parallel compression.
@@ -121,17 +121,19 @@ The above command works on all systems.
 
 ```bash
 compress [OPTIONS]
-OPTIONS: 
-    -h,--help            Show this help message
-    -o,--output          Set output file
-    -i,--input           Set input file
-    -v,--version         Get utility version
-    -T,--threads         Multi-thread compression
-    -V,--verbose         Enable verbose mode
-    -H,--huffman-only    Disable LZW compression size comparison
-    -L,--lzw-only        Disable Huffman compression size comparison
-    -A,--archive         Disable compression
-    -B,--block-size      Set block size (in bytes, default 16384 (16KB), 32767 Max (32KB - 1))
+OPTIONS:
+    -h,--help                 Show this help message
+    -o,--output               Set output file
+    -i,--input                Set input file
+    -v,--version              Get utility version
+    -T,--threads              Multi-thread compression
+    -V,--verbose              Enable verbose mode
+    -H,--no-huffman           Disable Huffman compression size comparison
+    -L,--no-lzw               Disable LZW compression size comparison
+    -R,--no-arithmetic        Disable Arithmetical compression size comparison
+    -A,--archive              Disable compression
+    -B,--block-size           Set block size (in bytes, default 16384 (16KB), 32767 Max (32KB - 1))
+    -E,--entropy-threshold    Set entropy threshold within [0, 8]
 ```
 
 #### `decompress`
@@ -170,3 +172,9 @@ git lfs install && git lfs checkout && git lfs pull
 Windows transparent compression result (Left) is somewhat larger than our result (right).
 
 ![Compression Result Size Comparison with Windows NTFS Transparent Compression](resources/compress.png)
+
+> **NOTE:**  
+> Arithmetic Coding is another compression algorithm specialized for data fitting Huffman Coding,
+> i.e., symbols with a variety of frequencies.
+> However, Arithmetic Coding in this example didn't yield astonishing improvement and
+> healthier data has significantly more compression ratio in Huffman Coding or LZW than Arithmetic Coding.
