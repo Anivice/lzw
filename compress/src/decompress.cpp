@@ -98,87 +98,34 @@ bool decompress(std::basic_istream<char>& input, std::basic_ostream<char>& outpu
     for (unsigned i = 0; i < thread_count; ++i)
     {
         auto & in_buffer = in_buffers[i];
-        uint8_t method = 0;
 
-        input.read(reinterpret_cast<char*>(&method), sizeof(method));
-        BUFFER_HEALTH_CHECK(input, in_buffer.second);
-
-        auto read_lzw_block = [&]()->bool
+        auto read_block = [&]()->bool
         {
-            // 1, read LZW block size
-            uint16_t LZW_Block_size = 0;
-            input.read(reinterpret_cast<char*>(&LZW_Block_size), sizeof(uint16_t));
+            uint8_t method = 0;
+            input.read(reinterpret_cast<char*>(&method), sizeof(method));
             if (!input.good()) {
-                in_buffer.second.clear();
                 return false;
             }
 
-            // 2. prepare LZW buffer space
-            in_buffer.first = used_lzw;
-            in_buffer.second.resize(LZW_Block_size);
+            uint16_t block_size = 0;
+            input.read(reinterpret_cast<char*>(&block_size), sizeof(uint16_t));
+            if (!input.good()) {
+                return false;
+            }
 
-            // 3. read and verify data length
-            input.read(reinterpret_cast<char*>(in_buffer.second.data()), LZW_Block_size);
-            if (const auto actual_size = input.gcount(); actual_size != LZW_Block_size) {
-                throw std::runtime_error("Short read for compressed block, corrupted data?");
+            in_buffer.first = method;
+            in_buffer.second.resize(block_size);
+            input.read(reinterpret_cast<char*>(in_buffer.second.data()), block_size);
+            if (const auto actual_size = input.gcount(); actual_size != block_size) {
+                return false;
             }
 
             return true;
         };
 
-        if (method == used_lzw)
-        {
-            if (!read_lzw_block()) {
-                break;
-            }
-        }
-        else if (method == used_huffman)
-        {
-            // Huffman encoding is compressed by LZW, again
-            // but offer better size performance than LZW in some cases
-
-            // 1. read as LZW block
-            if (!read_lzw_block()) {
-                break;
-            }
-
-            // 2. modify method
-            in_buffer.first = used_huffman;
-        }
-        else if (method == used_arithmetic)
-        {
-            in_buffer.first = used_arithmetic;
-            uint16_t Block_size = 0;
-            input.read(reinterpret_cast<char*>(&Block_size), sizeof(uint16_t));
-            if (!input.good()) {
-                in_buffer.second.clear();
-                return false;
-            }
-
-            in_buffer.second.resize(Block_size);
-            input.read(reinterpret_cast<char*>(in_buffer.second.data()), Block_size);
-            if (const auto actual_size = input.gcount(); actual_size != Block_size) {
-                throw std::runtime_error("Short read on block, corrupted data?");
-            }
-        }
-        else if (method == used_plain) // compression sucks for this data, and original data is actually fucking shorter
-        {
-            // just fucking read it
-            in_buffer.first = used_plain;
-            in_buffer.second.resize(BLOCK_SIZE);
-            uint16_t raw_block_size = 0;
-            input.read(reinterpret_cast<char*>(&raw_block_size), sizeof(uint16_t));
-            input.read(reinterpret_cast<char*>(in_buffer.second.data()), raw_block_size);
-            const auto actual_size = input.gcount();
-            if (actual_size != raw_block_size) {
-                throw std::runtime_error("Short read on block, corrupted data?");
-            }
-            in_buffer.second.resize(actual_size);
-        }
-        else // wtf is going on?
-        {
-            // should never reach this, unless runtime memory corruption
-            throw std::runtime_error("Unknown compression method, corrupted data?");
+        if (!read_block()) {
+            in_buffer.second.clear();
+            break;
         }
     }
 
@@ -204,19 +151,19 @@ bool decompress(std::basic_istream<char>& input, std::basic_ostream<char>& outpu
     std::vector < uint8_t > * out_buffer)->void
     {
         processed_size += in_buffer->size();
-        std::stringstream input_stream, output_stream;
-        input_stream.write(reinterpret_cast<char*>(in_buffer->data()), static_cast<std::streamsize>(in_buffer->size()));
+        std::vector < uint8_t > input_stream = *in_buffer, output_stream;
         arithmetic::Decode decompressor(input_stream, output_stream);
         decompressor.decode();
-        const auto dump = output_stream.str();
-        out_buffer->reserve(dump.size() + out_buffer->size());
-        out_buffer->insert(out_buffer->end(), dump.begin(), dump.end());
+        out_buffer->reserve(output_stream.size() + out_buffer->size());
+        out_buffer->insert(end(*out_buffer), begin(output_stream), end(output_stream));
+        in_buffer->clear();
     };
 
     auto raw_copy_over = [&](std::vector < uint8_t > * in_buffer,
     std::vector < uint8_t > * out_buffer)->void
     {
         processed_size += in_buffer->size();
+        out_buffer->reserve(out_buffer->size() + in_buffer->size());
         out_buffer->insert(end(*out_buffer), begin(*in_buffer), end(*in_buffer));
         in_buffer->clear();
     };

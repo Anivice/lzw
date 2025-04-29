@@ -1,4 +1,26 @@
+/* arithmetic.cpp
+ *
+ * Copyright 2025 Anivice Ives
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 #include "arithmetic.h"
+#include <algorithm>
+
 using namespace arithmetic;
 
 Compress::Compress()
@@ -49,7 +71,7 @@ void Compress::update_tables(const int sym_index)
 }
 
 
-Encode::Encode(std::basic_istream<char> & in_, std::basic_ostream<char> & out_)
+Encode::Encode(std::vector<uint8_t> & in_, std::vector<uint8_t> & out_)
     : in(in_), out(out_)
 {
     buffer = 0;
@@ -58,18 +80,19 @@ Encode::Encode(std::basic_istream<char> & in_, std::basic_ostream<char> & out_)
     low = 0;
     high = MAX_VALUE;
     opposite_bits = 0;
+    std::ranges::reverse(in);
 }
 
 void Encode::encode()
 {
-    if (in.eof() || out.eof()) {
+    if (in.empty()) {
         return;
     }
 
     while (true)
     {
-        const int ch = in.get();
-        if (in.eof()) {
+        const int ch = get();
+        if (ch == EOF) {
             break;
         }
         const int symbol = char_to_index[ch];
@@ -103,20 +126,20 @@ void Encode::encode_symbol(const int symbol)
         }
         else
             break;
-        low = 2 * low;
-        high = 2 * high;
+        low  <<= 1;
+        high <<= 1;
     }
 }
 
 void Encode::end_encoding()
 {
     opposite_bits++;
-    if (low < FIRST_QTR)
-        output_bits(0);
-    else
-        output_bits(1);
+    output_bits( (low < FIRST_QTR) ? 0 : 1 );
 
-    out.put(static_cast<char>(buffer >> bits_in_buf));
+    /* write the leftovers (if any) in the order
+       the decoder expects: LSB first                 */
+    if (bits_in_buf > 0)
+        out.push_back(static_cast<uint8_t>(buffer >> (8 - bits_in_buf)));
 }
 
 void Encode::output_bits(const int bit)
@@ -132,18 +155,15 @@ void Encode::output_bits(const int bit)
 void Encode::write_bit(const int bit)
 {
     buffer >>= 1;
-    if (bit)
-        buffer |= 0x80;
-    bits_in_buf++;
-    if (bits_in_buf == 8)
-    {
-        out.put(static_cast<char>(buffer));
+    if (bit) buffer |= 0x80;
+    if (++bits_in_buf == 8) {
+        out.push_back(static_cast<uint8_t>(buffer));
         bits_in_buf = 0;
+        buffer      = 0;
     }
 }
 
-
-Decode::Decode(std::basic_istream<char> & in_, std::basic_ostream<char> & out_)
+Decode::Decode(std::vector<uint8_t> & in_, std::vector<uint8_t> & out_)
     : in(in_), out(out_)
 {
     buffer = 0;
@@ -152,6 +172,7 @@ Decode::Decode(std::basic_istream<char> & in_, std::basic_ostream<char> & out_)
 
     low = 0;
     high = MAX_VALUE;
+    std::ranges::reverse(in);
 }
 
 void Decode::load_first_value()
@@ -163,17 +184,19 @@ void Decode::load_first_value()
 
 void Decode::decode()
 {
-    if (!in || !out) {
+    if (in.empty()) {
         return;
     }
+
     load_first_value();
     while (true)
     {
         const int sym_index = decode_symbol();
-        if ((sym_index == EOF_SYMBOL) || end_decoding)
+        if (sym_index == EOF_SYMBOL) {
             break;
+        }
         const int ch = index_to_char[sym_index];
-        out.put(static_cast<char>(ch));
+        out.push_back(static_cast<uint8_t>(ch));
         update_tables(sym_index);
     }
 }
@@ -206,8 +229,8 @@ int Decode::decode_symbol()
         }
         else
             break;
-        low = 2 * low;
-        high = 2 * high;
+        low  <<= 1;
+        high <<= 1;
         value = 2 * value + get_bit();
     }
     return symbol_index;
@@ -217,12 +240,13 @@ int Decode::get_bit()
 {
     if (bits_in_buf == 0)
     {
-        buffer = in.get();
+        buffer = get();
         if (buffer == EOF)
         {
             end_decoding = true;
-            return -1;
+            return 0;
         }
+
         bits_in_buf= 8;
     }
     const int t = buffer & 1;

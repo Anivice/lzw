@@ -71,16 +71,22 @@ Arguments::predefined_args_t arguments = {
         .explanation = "Enable verbose mode"
     },
     Arguments::single_arg_t {
-        .name = "huffman-only",
+        .name = "no-huffman",
         .short_name = 'H',
+        .value_required = false,
+        .explanation = "Disable Huffman compression size comparison"
+    },
+    Arguments::single_arg_t {
+        .name = "no-lzw",
+        .short_name = 'L',
         .value_required = false,
         .explanation = "Disable LZW compression size comparison"
     },
     Arguments::single_arg_t {
-        .name = "lzw-only",
-        .short_name = 'L',
+        .name = "no-arithmetic",
+        .short_name = 'R',
         .value_required = false,
-        .explanation = "Disable Huffman compression size comparison"
+        .explanation = "Disable Arithmetical compression size comparison"
     },
     Arguments::single_arg_t {
         .name = "archive",
@@ -135,11 +141,8 @@ long double entropy_of(const std::vector<uint8_t>& data, std::map <uint8_t, uint
 
 void compress_on_one_block(std::vector<uint8_t> * in_buffer, std::vector<uint8_t> * out_buffer)
 {
-    std::vector < uint8_t >
-        buffer_lzw = *in_buffer, buffer_lzw_output,
-        buffer_huffman = *in_buffer, buffer_huffman_lzw_output,
-        buffer_arithmetic = *in_buffer, buffer_arithmetic_output;
-    std::thread huffman_thread;
+    std::vector < std::pair < std::vector<uint8_t> , uint8_t > > size_map;
+    std::mutex mutex_in, mutex_out;
 
     if (verbose) {
         for (const auto & symbol : *in_buffer) {
@@ -147,128 +150,185 @@ void compress_on_one_block(std::vector<uint8_t> * in_buffer, std::vector<uint8_t
         }
     }
 
-    auto LZW9Compress = [](std::vector<uint8_t> & input, std::vector<uint8_t> & output)->uint16_t
+    auto LZW9Compress = [](std::vector<uint8_t> & input, std::vector<uint8_t> & output)->void
     {
         std::vector<uint8_t> compressed_data_lzw_tmp;
         lzw <LZW_COMPRESSION_BIT_SIZE> compressor(input, compressed_data_lzw_tmp);
         compressor.compress();
+
         const auto data_len_lzw_tmp = static_cast<uint16_t>(compressed_data_lzw_tmp.size());
         output.reserve(compressed_data_lzw_tmp.size() + 2 + output.size());
         output.push_back(((uint8_t*)&data_len_lzw_tmp)[0]);
         output.push_back(((uint8_t*)&data_len_lzw_tmp)[1]);
         output.insert(end(output), begin(compressed_data_lzw_tmp), end(compressed_data_lzw_tmp));
-        const auto data_len_lzw = static_cast<uint16_t>(compressed_data_lzw_tmp.size() + 2);
-        return data_len_lzw;
     };
 
-    auto HuffmanCompress = [](std::vector<uint8_t> & input, std::vector<uint8_t> & output)->uint16_t
+    auto HuffmanCompress = [](std::vector<uint8_t> & input, std::vector<uint8_t> & output)->void
     {
         // try huffman
         Huffman huffmanCompressor(input, output);
         huffmanCompressor.compress();
-        const auto data_len_huffman = static_cast<uint16_t>(output.size());
-        return data_len_huffman;
     };
 
-    auto ArithmeticCompress = [](std::vector<uint8_t> & input, std::vector<uint8_t> & output)->uint16_t
+    auto ArithmeticCompress = [](std::vector<uint8_t> & input, std::vector<uint8_t> & output)->void
     {
-        std::stringstream input_stream, output_stream;
-        input_stream.write(reinterpret_cast<char*>(input.data()), static_cast<std::streamsize>(input.size()));
-        arithmetic::Encode compressor(input_stream, output_stream);
+        std::vector<uint8_t> in = input, out;
+        arithmetic::Encode compressor(in, out);
         compressor.encode();
-        std::string dump = output_stream.str();
-        const auto data_len_arithmetic = static_cast<uint16_t>(dump.size());
+
+        const auto data_len_arithmetic = static_cast<uint16_t>(out.size());
         output.push_back(((uint8_t*)&data_len_arithmetic)[0]);
         output.push_back(((uint8_t*)&data_len_arithmetic)[1]);
-        output.insert(end(output), begin(dump), end(dump));
-        return data_len_arithmetic;
+        output.insert(end(output), begin(out), end(out));
+    };
+
+    auto CopyOver = [](std::vector < uint8_t > & in_buffer, std::vector < uint8_t > & out_buffer)->void
+    {
+        const auto raw_block_size = static_cast<uint16_t>(in_buffer.size());
+        out_buffer.push_back(((uint8_t*)&raw_block_size)[0]);
+        out_buffer.push_back(((uint8_t*)&raw_block_size)[1]);
+        out_buffer.insert(end(out_buffer), begin(in_buffer), end(in_buffer));
+        in_buffer.clear();
+    };
+
+    auto compression_lzw_block = [&]()->void
+    {
+        std::vector<uint8_t> in, out;
+
+        {
+            std::lock_guard lock(mutex_in);
+            in = *in_buffer;
+        }
+
+        LZW9Compress(in, out);
+
+        {
+            std::lock_guard lock(mutex_out);
+            size_map.emplace_back(out, used_lzw);
+        }
     };
 
     auto compression_huffman_block = [&]()->void
     {
-        std::vector < uint8_t > buffer_huffman_output;
-        // Huffman Encoding
-        HuffmanCompress(buffer_huffman, buffer_huffman_output);
-        // LZW for huffman in hope that it compresses repeated data patterns
-        LZW9Compress(buffer_huffman_output, buffer_huffman_lzw_output);
+        std::vector<uint8_t> in, out, out2;
+
+        {
+            std::lock_guard lock(mutex_in);
+            in = *in_buffer;
+        }
+
+        HuffmanCompress(in, out);
+        LZW9Compress(out, out2);
+
+        {
+            std::lock_guard lock(mutex_out);
+            size_map.emplace_back(out2, used_huffman);
+        }
+
+    };
+
+    auto compression_arithmetic_block = [&]()->void
+    {
+        std::vector<uint8_t> in, out;
+
+        {
+            std::lock_guard lock(mutex_in);
+            in = *in_buffer;
+        }
+
+        ArithmeticCompress(in, out);
+
+        {
+            std::lock_guard lock(mutex_out);
+            size_map.emplace_back(out, used_arithmetic);
+        }
+    };
+
+    auto no_compression = [&]()->void
+    {
+        std::vector<uint8_t> in, out;
+
+        {
+            std::lock_guard lock(mutex_in);
+            in = *in_buffer;
+        }
+
+        CopyOver(in, out);
+
+        {
+            std::lock_guard lock(mutex_out);
+            size_map.emplace_back(out, used_plain);
+        }
     };
 
     bool disable_compression = false;
-    std::map <uint8_t, uint64_t> freq_map;
-    if (const auto current_entropy = entropy_of(*in_buffer, freq_map);
-        current_entropy > 7)
+    if (!(disable_lzw && disable_huffman && disable_arithmetic))
     {
+        std::map <uint8_t, uint64_t> freq_map;
+        if (const auto current_entropy = entropy_of(*in_buffer, freq_map);
+            current_entropy > 7)
+        {
+            disable_compression = true;
+        }
+    } else {
         disable_compression = true;
     }
 
-    if (!disable_compression && !disable_huffman) {
-        huffman_thread = std::thread(compression_huffman_block);
-    }
+    std::vector < std::thread > thread_compression;
 
     if (!disable_compression && !disable_lzw) {
-        // Plain LZW
-        LZW9Compress(buffer_lzw, buffer_lzw_output);
+        thread_compression.emplace_back(compression_lzw_block);
+    }
+
+    if (!disable_compression && !disable_huffman) {
+        thread_compression.emplace_back(compression_huffman_block);
     }
 
     if (!disable_compression && !disable_arithmetic) {
-        ArithmeticCompress(buffer_arithmetic, buffer_arithmetic_output);
+        thread_compression.emplace_back(compression_arithmetic_block);
+    }
+
+    if (disable_compression) {
+        no_compression();
     }
 
     // external huffman calculation
-    if (huffman_thread.joinable()) {
-        huffman_thread.join();
-    }
-
-    std::vector < std::pair < uint64_t, uint8_t > > size_map;
-    size_map.emplace_back(buffer_huffman_lzw_output.size(), used_huffman);
-    size_map.emplace_back(buffer_lzw_output.size(), used_lzw);
-    size_map.emplace_back(buffer_arithmetic_output.size(), used_arithmetic);
+   for (auto & thread : thread_compression) {
+       if (thread.joinable()) {
+           thread.join();
+       }
+   }
 
     std::erase_if(size_map, []
-        (const std::pair < uint64_t, uint8_t > & left)->bool
+        (const std::pair < std::vector<uint8_t>&, uint8_t > & left)->bool
     {
-        return left.first == 0;
+        return left.first.empty();
     });
 
-    std::ranges::sort(size_map, []
-        (const std::pair < uint64_t, uint8_t > & left, const std::pair < uint64_t, uint8_t > & right) -> bool
-    {
-        return left.first < right.first;
-    });
+    const std::vector<uint8_t> * compression_buffer = nullptr;
+    uint8_t compression_method = 0;
 
-    const uint8_t compression_method = size_map.empty() ? used_plain : size_map.front().second;
-    if (compression_method == used_plain) // data expanded
+    for (auto & [buffer, flag] : size_map)
     {
-        out_buffer->push_back(used_plain);
-        const auto raw_block_size = static_cast<uint16_t>(in_buffer->size());
-        out_buffer->push_back(((uint8_t*)&raw_block_size)[0]);
-        out_buffer->push_back(((uint8_t*)&raw_block_size)[1]);
-        out_buffer->insert(end(*out_buffer), begin(*in_buffer), end(*in_buffer));
-        in_buffer->clear();
-        ++raw_blocks;
+        if ((compression_buffer == nullptr) || (compression_buffer->size() > buffer.size())) {
+            compression_buffer = &buffer;
+            compression_method = flag;
+        }
     }
-    else // data compressed
-    {
-        out_buffer->push_back(compression_method);
+
+    out_buffer->reserve(BLOCK_SIZE);
+    out_buffer->push_back(compression_method);
+    out_buffer->insert(end(*out_buffer), begin(*compression_buffer), end(*compression_buffer));
+
+    if (verbose) {
         if (compression_method == used_lzw) {
-            out_buffer->insert(end(*out_buffer),
-                begin(buffer_lzw_output), end(buffer_lzw_output));
-            in_buffer->clear();
             ++lzw_compressed_blocks;
         } else if (compression_method == used_huffman) {
-            out_buffer->insert(end(*out_buffer),
-                begin(buffer_huffman_lzw_output), end(buffer_huffman_lzw_output));
-            in_buffer->clear();
             ++huffman_compressed_blocks;
         } else if (compression_method == used_arithmetic) {
-            out_buffer->insert(end(*out_buffer),
-                begin(buffer_arithmetic_output), end(buffer_arithmetic_output));
-            in_buffer->clear();
             ++arithmetic_compressed_blocks;
-        }
-        else // WTF?
-        {
-            throw std::runtime_error("Invalid compression method, likely internal BUG");
+        } else if (compression_method == used_plain) {
+            ++raw_blocks;
         }
     }
 }
@@ -565,11 +625,12 @@ int main(const int argc, const char** argv)
             debug::log(debug::to_stderr, debug::info_log, "Verbose mode enabled\n\n");
         }
 
-        disable_lzw = static_cast<Arguments::args_t>(args).contains("huffman-only");
-        disable_huffman = static_cast<Arguments::args_t>(args).contains("lzw-only");
+        disable_lzw = static_cast<Arguments::args_t>(args).contains("no-lzw");
+        disable_huffman = static_cast<Arguments::args_t>(args).contains("no-huffman");
+        disable_arithmetic = static_cast<Arguments::args_t>(args).contains("no-arithmetic");
 
         if (static_cast<Arguments::args_t>(args).contains("archive")) {
-            disable_lzw = disable_huffman = true;
+            disable_arithmetic = disable_lzw = disable_huffman = true;
         }
 
         if (static_cast<Arguments::args_t>(args).contains("block-size"))

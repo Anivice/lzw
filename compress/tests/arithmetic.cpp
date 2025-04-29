@@ -1,11 +1,31 @@
+/* arithmetic.cpp
+ *
+ * Copyright 2025 Anivice Ives
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 #include "arithmetic.h"
 #include <vector>
-#include <sstream>
+#include <cstdint>
 
 int main()
 {
     // data with various frequencies
-    const std::vector < char > data = {
+    const std::vector < uint8_t > data = {
         'A', 'B', 'C', 'D', 'E', 'F',
         'A',      'C', 'D',      'F',
                   'C', 'D', 'E', 'F', 'G',
@@ -15,18 +35,13 @@ int main()
     /*  We have 29 symbols, with 13 distinctive symbols */
     };
 
-    std::stringstream input, output;
-    for (const char c : data) {
-        input << c;
-    }
+    std::vector < uint8_t > input = data, output, output2;
 
     arithmetic::Encode compressor(input, output);
     compressor.encode();
 
-    const auto str = output.str();
+    std::vector<uint8_t> input2 = output;
 
-    arithmetic::Decode decompressor(output, input);
+    arithmetic::Decode decompressor(input2, output2);
     decompressor.decode();
-
-    std::cout << input.str() << std::endl;
 }

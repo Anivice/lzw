@@ -95,6 +95,17 @@ Arguments::single_arg_t Arguments::get_single_arg_by_fullname(const std::string 
 Arguments::Arguments(const int argc, const char* argv[], predefined_args_t predefined_args_)
     : predefined_args(std::move(predefined_args_))
 {
+    std::map < std::string, uint8_t > arg_long_map;
+    std::map < char, uint8_t > arg_map;
+    for (const auto & arg : predefined_args) {
+        arg_map.emplace(arg.short_name, 0);
+        arg_long_map.emplace(arg.name, 0);
+    }
+
+    if (arg_map.size() != arg_long_map.size() || arg_map.size() != predefined_args.size()) {
+        throw std::invalid_argument("You have duplicated arguments");
+    }
+
     bool last_is_an_option = false;
     std::string arg_key_str;
 
