@@ -307,7 +307,7 @@ void compress_on_one_block(const std::vector<uint8_t> * in_buffer, std::vector<u
    }
 
     std::erase_if(size_map, []
-        (const std::pair < std::vector<uint8_t>&, uint8_t > & left)->bool
+        (const std::pair < const std::vector<uint8_t>&, uint8_t > & left)->bool
     {
         return left.first.empty();
     });
