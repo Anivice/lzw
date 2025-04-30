@@ -410,13 +410,30 @@ void compress_from_stdin()
     std::cout.write((char*)(&BLOCK_SIZE), sizeof(BLOCK_SIZE));
 
     if (verbose) {
+        debug::log(debug::to_stderr, debug::info_log, "\n");
         compressed_size += sizeof(magic) + sizeof(BLOCK_SIZE);
     }
 
-    while (std::cin.good()) {
+    const auto before = std::chrono::system_clock::now();
+
+    while (std::cin.good())
+    {
         if (!compress(std::cin, std::cout)) {
             break;
         }
+
+        if (std::stringstream ss;
+            verbose && speed_from_time(before, ss, processed_size))
+        {
+            debug::log(debug::to_stderr,
+                debug::cursor_off,
+                debug::clear_line,
+                debug::info_log, ss.str(), "\n");
+        }
+    }
+
+    if (verbose) {
+        debug::log(debug::to_stderr, debug::cursor_on);
     }
 
     std::cout.flush();
@@ -445,28 +462,13 @@ void compress_file(const std::string& in, const std::string& out)
     }
 
     std::vector < uint64_t > seconds_left_sample_space;
-    const uint64_t sample_size = std::min(static_cast<unsigned long>(original_size / BLOCK_SIZE), 256ul);
-    seconds_left_sample_space.reserve(sample_size);
-    auto add_sample = [&](const uint64_t sample)->void
-    {
-        if (seconds_left_sample_space.size() <= sample_size) {
-            seconds_left_sample_space.push_back(sample);
-        } else {
-            seconds_left_sample_space.erase(seconds_left_sample_space.begin());
-            seconds_left_sample_space.push_back(sample);
-        }
-    };
-
-    if (verbose) {
-        debug::log(debug::to_stderr, debug::info_log, "\n");
-    }
-
     const auto before = std::chrono::system_clock::now();
 
     output_file.write((char*)(magic), sizeof(magic));
     output_file.write((char*)(&BLOCK_SIZE), sizeof(BLOCK_SIZE));
 
     if (verbose) {
+        debug::log(debug::to_stderr, debug::info_log, "\n");
         compressed_size += sizeof(magic) + sizeof(BLOCK_SIZE);
     }
 
@@ -476,28 +478,9 @@ void compress_file(const std::string& in, const std::string& out)
             break;
         }
 
-        const auto after = std::chrono::system_clock::now();
-        if (const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(after - before).count();
-            verbose && processed_size > 0 && duration > 0)
+        if (std::stringstream ss;
+            verbose && speed_from_time(before, ss, processed_size, original_size, &seconds_left_sample_space))
         {
-            std::stringstream ss;
-            const auto bps = processed_size * 8 / duration * 1000;
-            uint64_t seconds_left = (original_size - processed_size) / (bps / 8);
-            add_sample(seconds_left);
-
-            if (bps > 1024 * 1024)
-            {
-                ss << processed_size * 8 << " bits processed, speed " << bps / 1024 / 1024 << " Mbps ";
-            } else if (bps > 10 * 1024) {
-                ss << processed_size * 8 << " bits processed, speed " << bps / 1024 << " Kbps ";
-            } else {
-                ss << processed_size * 8 << " bits processed, speed " << bps << " bps ";
-            }
-
-            ss  << std::fixed << std::setprecision(2)
-                << static_cast<long double>(processed_size) / static_cast<long double>(original_size) * 100
-                << "% [ETA=" << seconds_to_human_readable_dates(average(seconds_left_sample_space)) << "]";
-
             debug::log(debug::to_stderr,
                 debug::cursor_off,
                 debug::clear_line,

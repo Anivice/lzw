@@ -31,16 +31,6 @@
 #include "log.hpp"
 #include <sstream>
 
-// bool is_stdout_pipe()
-// {
-// #ifdef WIN32
-//     const DWORD fileType = GetFileType(GetStdHandle(STD_OUTPUT_HANDLE));
-//     return (fileType == FILE_TYPE_PIPE);
-// #else
-//     return !isatty(fileno(stdout));
-// #endif
-// }
-
 void set_binary()
 {
 #ifdef WIN32
@@ -93,4 +83,55 @@ std::string seconds_to_human_readable_dates(uint64_t seconds)
         << (seconds == 0 ? "0s" : std::to_string(seconds) + "s");
 
     return ss.str();
+}
+
+bool speed_from_time(
+    const decltype(std::chrono::system_clock::now())& before,
+    std::stringstream & out,
+    const uint64_t processed_size,
+    const uint64_t original_size,
+    std::vector < uint64_t > * seconds_left_sample_space)
+{
+    auto add_sample = [&](const uint64_t sample)->void
+    {
+        if (const uint64_t sample_size = min(static_cast<unsigned long>(original_size / BLOCK_SIZE), 256ul);
+            seconds_left_sample_space->size() <= sample_size)
+        {
+            seconds_left_sample_space->push_back(sample);
+        } else {
+            seconds_left_sample_space->erase(seconds_left_sample_space->begin());
+            seconds_left_sample_space->push_back(sample);
+        }
+    };
+
+    const auto after = std::chrono::system_clock::now();
+    if (const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(after - before).count();
+        processed_size > 0 && duration > 0)
+    {
+        const auto bps = processed_size * 8 / duration * 1000;
+        if (seconds_left_sample_space) {
+            const uint64_t seconds_left = (original_size - processed_size) / (bps / 8);
+            add_sample(seconds_left);
+        }
+
+        if (bps > 1024 * 1024)
+        {
+            out << processed_size * 8 << " bits processed, speed " << bps / 1024 / 1024 << " Mbps";
+        } else if (bps > 10 * 1024) {
+            out << processed_size * 8 << " bits processed, speed " << bps / 1024 << " Kbps";
+        } else {
+            out << processed_size * 8 << " bits processed, speed " << bps << " bps";
+        }
+
+        if (seconds_left_sample_space)
+        {
+            out << " " << std::fixed << std::setprecision(2)
+                << static_cast<long double>(processed_size) / static_cast<long double>(original_size) * 100
+                << "% [ETA=" << seconds_to_human_readable_dates(average(*seconds_left_sample_space)) << "]";
+        }
+
+        return true;
+    }
+
+    return false;
 }

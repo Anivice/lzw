@@ -20,6 +20,7 @@
             <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-debug-debianarm64" />
             <excludedPath local="true" path="$PROJECT_DIR$/out/build/x86-debug" />
             <excludedPath local="true" path="$PROJECT_DIR$/out/build/x64-debug" />
+            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-debug-debianarm64" />
             <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-minsizerel" />
             <excludedPath local="true" path="$PROJECT_DIR$/out/build/x86-release" />
             <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-debug" />
@@ -34,6 +35,7 @@
             <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-debug-archlinux" />
             <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-debug-wsl" />
             <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-release-visual-studio" />
+            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-release-debianarm64" />
             <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-debug-visual-studio" />
             <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-release-archlinux" />
             <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-release-archlinux-coverage" />
@@ -52,23 +54,40 @@
             <mapping deploy="/tmp/tmp.cnLntwh1MS/lzw.remote" local="$PROJECT_DIR$" />
           </mappings>
           <excludedPaths>
-            <excludedPath local="true" path="$PROJECT_DIR$/.vs" />
-            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-debug-archlinux" />
+            <excludedPath local="true" path="$PROJECT_DIR$/out/build/x86-debug" />
+            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-default-archlinux" />
+            <excludedPath local="true" path="$PROJECT_DIR$/out/build/x86-release" />
             <excludedPath local="true" path="$PROJECT_DIR$/out" />
             <excludedPath local="true" path="$PROJECT_DIR$/out/build/x64-debug" />
             <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-release-archlinux" />
             <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-debug-mingw" />
+            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-debug-archlinux" />
             <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-release-visual-studio" />
             <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-debug-debianarm64" />
-            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-debug-visual-studio" />
             <excludedPath local="true" path="$PROJECT_DIR$/out/build/x86-debug" />
+            <excludedPath local="true" path="$PROJECT_DIR$/out/build/x64-debug" />
+            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-debug-debianarm64" />
             <excludedPath local="true" path="$PROJECT_DIR$/out/build/x86-release" />
+            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-debug" />
+            <excludedPath local="true" path="$PROJECT_DIR$/.vs" />
+            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-debug-mingw" />
+            <excludedPath local="true" path="$PROJECT_DIR$/out/build/x64-release" />
+            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-default-visual-studio" />
+            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-debug-visual-studio" />
+            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-debug" />
+            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-default-visual-studio" />
+            <excludedPath local="true" path="$PROJECT_DIR$/.vs" />
+            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-debug-archlinux" />
+            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-debug-wsl" />
+            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-release-visual-studio" />
+            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-release-debianarm64" />
+            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-debug-visual-studio" />
+            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-release-archlinux" />
             <excludedPath local="true" path="$PROJECT_DIR$/out/build/x64-release" />
             <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-release-debianarm64" />
             <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-default-archlinux" />
-            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-debug" />
             <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-debug-wsl" />
-            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-default-visual-studio" />
+            <excludedPath local="true" path="$PROJECT_DIR$/out" />
           </excludedPaths>
         </serverdata>
       </paths>

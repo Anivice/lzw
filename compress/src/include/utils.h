@@ -24,6 +24,8 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include <chrono>
+#include <sstream>
 
 bool is_stdout_pipe();
 void set_binary();
@@ -51,5 +53,12 @@ Type average(const std::vector<Type> & data)
 
     return sum / data.size();
 }
+
+bool speed_from_time(
+    const decltype(std::chrono::system_clock::now())& before,
+    std::stringstream & out,
+    uint64_t processed_size,
+    uint64_t original_size = 0,
+    std::vector < uint64_t > * seconds_left_sample_space = nullptr);
 
 #endif //UTILS_H
