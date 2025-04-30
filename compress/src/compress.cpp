@@ -497,11 +497,10 @@ void compress_file(const std::string& in, const std::string& out)
 }
 
 template < typename Type >
-std::string literalize(const Type & type, std::vector<uint64_t> & string_lengths)
+std::string literalize(const Type & type)
 {
     std::stringstream ss;
     ss << std::fixed << std::setprecision(4) << type;
-    string_lengths.emplace_back(ss.str().size());
     return ss.str();
 }
 
@@ -519,7 +518,7 @@ uint64_t find_max(const std::vector<Type> & data)
     return len;
 }
 
-using table_t = std::vector<std::pair<std::string, std::string>>;
+using table_t = std::vector<std::pair<std::string, std::pair < std::string, std::string> >>;
 void print_table(const std::string & title, table_t & content)
 {
     constexpr auto split = static_cast<char>(179);
@@ -527,23 +526,28 @@ void print_table(const std::string & title, table_t & content)
     constexpr auto head = static_cast<char>(196);
 
     // 1. find max length of entry and keys
-    std::vector<uint64_t> key_len, val_len;
+    std::vector<uint64_t> key_len, val_len, unit_len;
     for (const auto & [key, val] : content)
     {
         key_len.push_back(key.size());
-        val_len.push_back(val.size());
+        val_len.push_back(val.first.size());
+        unit_len.push_back(val.second.size());
     }
 
     const auto max_key_len = find_max(key_len);
     const auto max_val_len = find_max(val_len);
-    const auto max_len = max_key_len + max_val_len + 4;
-    const auto title_starting = (max_len - title.size()) / 2;
+    const auto max_unit_len = find_max(unit_len);
+    const auto title_starting = (max_key_len + max_val_len + max_unit_len + 4 - title.size()) / 2;
     debug::log(debug::to_stderr, debug::info_log, std::string(title_starting, ' '), title, "\n");
-    debug::log(debug::to_stderr, debug::info_log, std::string(max_key_len, head), head_joint, std::string(max_val_len + 3, head), "\n");
+    debug::log(debug::to_stderr, debug::info_log,
+        std::string(max_key_len + 2, head), head_joint,
+        std::string(max_val_len + 1 + max_unit_len, head), "\n");
     for (const auto & [key, val] : content)
     {
-        debug::log(debug::to_stderr, debug::info_log, key, std::string(max_key_len - key.size(), ' '),
-            split, "   ", val, "\n");
+        debug::log(debug::to_stderr, debug::info_log,
+            key, std::string(max_key_len - key.size(), ' '),
+            "  ", split, " ",
+            std::string(max_val_len - val.first.size(), ' '), val.first, " ", val.second, "\n");
     }
 }
 
@@ -618,49 +622,53 @@ int main(const int argc, const char** argv)
                     performance = "Possibly Mono-Contextual Data";
                 }
 
-                std::vector<uint64_t> string_lengths;
-                const auto processed_size_literal = literalize(processed_size * 8, string_lengths);
-                const auto compressed_size_literal = literalize(compressed_size * 8, string_lengths);
-                const auto compression_ratio_literal = literalize(compression_ratio * 100.0, string_lengths);
-                const auto CORatio_literal = literalize(CORatio * 100.0, string_lengths);
-                const auto BLOCK_SIZE_literal = literalize(BLOCK_SIZE, string_lengths);
-                const auto total_blocks_literal = literalize(total_blocks, string_lengths);
-                const auto compressed_blocks_literal = literalize(compressed_blocks, string_lengths);
-                const auto lzw_compressed_blocks_literal = literalize(lzw_compressed_blocks, string_lengths);
-                const auto huffman_compressed_blocks_literal = literalize(huffman_compressed_blocks, string_lengths);
-                const auto arithmetic_compressed_blocks_literal = literalize(arithmetic_compressed_blocks, string_lengths);
-                const auto raw_blocks_literal = literalize(raw_blocks, string_lengths);
-                const auto CRRatio_literal = literalize(CRRatio * 100, string_lengths);
-                const auto CAPercentage_literal = literalize(CAPercentage, string_lengths);
-                const auto entropy_literal = literalize(entropy, string_lengths);
-                const auto numerical_bits_expectation_literal = literalize(numerical_bits_expectation, string_lengths);
-                const auto expectation_ratio_literal = literalize(expectation_ratio * 100, string_lengths);
-                const auto performance_literal = literalize(performance, string_lengths);
-                const auto max_len = find_max(string_lengths);
-
-                auto literal_padding = [&](const std::string & literal)->std::string {
-                    return std::string(max_len - literal.size(), ' ') + literal;
-                };
+                const auto processed_size_literal = literalize(processed_size * 8);
+                const auto compressed_size_literal = literalize(compressed_size * 8);
+                const auto compression_ratio_literal = literalize(compression_ratio * 100.0);
+                const auto CORatio_literal = literalize(CORatio * 100.0);
+                const auto BLOCK_SIZE_literal = literalize(BLOCK_SIZE);
+                const auto total_blocks_literal = literalize(total_blocks);
+                const auto compressed_blocks_literal = literalize(compressed_blocks);
+                const auto lzw_compressed_blocks_literal = literalize(lzw_compressed_blocks);
+                const auto huffman_compressed_blocks_literal = literalize(huffman_compressed_blocks);
+                const auto arithmetic_compressed_blocks_literal = literalize(arithmetic_compressed_blocks);
+                const auto raw_blocks_literal = literalize(raw_blocks);
+                const auto CRRatio_literal = literalize(CRRatio * 100);
+                const auto CAPercentage_literal = literalize(CAPercentage);
+                const auto entropy_literal = literalize(entropy);
+                const auto numerical_bits_expectation_literal = literalize(numerical_bits_expectation);
+                const auto expectation_ratio_literal = literalize(expectation_ratio * 100);
+                const auto performance_literal = literalize(performance);
 
                 table_t table;
-                table.emplace_back(std::make_pair<std::string, std::string>("Original size        ", literal_padding(processed_size_literal) + " Bits"));
-                table.emplace_back(std::make_pair<std::string, std::string>("Compressed size      ", literal_padding(compressed_size_literal) + " Bits"));
-                table.emplace_back(std::make_pair<std::string, std::string>("Compression ratio    ", literal_padding(compression_ratio_literal) + " %"));
-                table.emplace_back(std::make_pair<std::string, std::string>("C/O ratio            ", literal_padding(CORatio_literal) + " %"));
-                table.emplace_back(std::make_pair<std::string, std::string>("Block Size           ", literal_padding(BLOCK_SIZE_literal) + " Bytes"
-                    + ((BLOCK_SIZE > 1024) ? " (" + std::to_string(BLOCK_SIZE / 1024) + " KB)" : "")));
-                table.emplace_back(std::make_pair<std::string, std::string>("Block count          ", literal_padding(total_blocks_literal) + ""));
-                table.emplace_back(std::make_pair<std::string, std::string>("Compressed blocks    ", literal_padding(compressed_blocks_literal) + ""));
-                table.emplace_back(std::make_pair<std::string, std::string>(" - LZW blocks        ", literal_padding(lzw_compressed_blocks_literal) + ""));
-                table.emplace_back(std::make_pair<std::string, std::string>(" - Huffman blocks    ", literal_padding(huffman_compressed_blocks_literal) + ""));
-                table.emplace_back(std::make_pair<std::string, std::string>(" - Arithmetic blocks ", literal_padding(arithmetic_compressed_blocks_literal) + ""));
-                table.emplace_back(std::make_pair<std::string, std::string>("Raw blocks           ", literal_padding(raw_blocks_literal) + ""));
-                table.emplace_back(std::make_pair<std::string, std::string>("C/R ratio            ", literal_padding(CRRatio_literal) + " % "));
-                table.emplace_back(std::make_pair<std::string, std::string>("C/A percentage       ", literal_padding(CAPercentage_literal) + " % "));
-                table.emplace_back(std::make_pair<std::string, std::string>("Raw data entropy     ", literal_padding(entropy_literal) + ""));
-                table.emplace_back(std::make_pair<std::string, std::string>("Expectation          ", literal_padding(numerical_bits_expectation_literal) + " Bits"));
-                table.emplace_back(std::make_pair<std::string, std::string>("AB/EB percentage     ", literal_padding(expectation_ratio_literal) + " %"));
-                table.emplace_back(std::make_pair<std::string, std::string>("Performance          ", literal_padding(performance_literal) + ""));
+
+                auto add_entry = [&](std::string key,
+                    std::string value,
+                    std::string val_unt)->void
+                {
+                    table.emplace_back(
+                        std::make_pair<std::string, std::pair<std::string, std::string>>
+                        (std::move(key), std::make_pair<std::string, std::string>(std::move(value), std::move(val_unt))));
+                };
+
+                add_entry("Original size", processed_size_literal, "Bits");
+                add_entry("Compressed size", compressed_size_literal, "Bits");
+                add_entry("Compression ratio", compression_ratio_literal, "%");
+                add_entry("C/O ratio", CORatio_literal, "%");
+                add_entry("Block Size", BLOCK_SIZE_literal,
+                    "Bytes" + ((BLOCK_SIZE > 1024) ? " (" + std::to_string(BLOCK_SIZE / 1024) + " KB)" : ""));
+                add_entry("Block count", total_blocks_literal, "");
+                add_entry("Compressed blocks", compressed_blocks_literal, "");
+                add_entry(" - LZW blocks", lzw_compressed_blocks_literal, "");
+                add_entry(" - Huffman blocks", huffman_compressed_blocks_literal, "");
+                add_entry(" - Arithmetic blocks", arithmetic_compressed_blocks_literal, "");
+                add_entry("Raw blocks", raw_blocks_literal, "");
+                add_entry("C/R ratio", CRRatio_literal, "%");
+                add_entry("C/A percentage", CAPercentage_literal, "%");
+                add_entry("Raw data entropy", entropy_literal, "");
+                add_entry("Expectation", numerical_bits_expectation_literal, "Bits");
+                add_entry("AB/EB percentage", expectation_ratio_literal, "%");
+                add_entry("Performance", performance_literal, "");
                 print_table("GENERAL PERFORMANCE", table);
             }
         };
