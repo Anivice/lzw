@@ -128,9 +128,9 @@ OPTIONS:
     -v,--version              Get utility version
     -T,--threads              Multi-thread compression
     -V,--verbose              Enable verbose mode
-    -H,--no-huffman           Disable Huffman compression size comparison
-    -L,--no-lzw               Disable LZW compression size comparison
-    -R,--no-arithmetic        Disable Arithmetical compression size comparison
+    -H,--no-huffman           Disable Huffman compression
+    -L,--no-lzw               Disable LZW compression
+    -R,--no-arithmetic        Disable Arithmetical compression
     -A,--archive              Disable compression
     -B,--block-size           Set block size (in bytes, default 16384 (16KB), 32767 Max (32KB - 1))
     -E,--entropy-threshold    Set entropy threshold within [0, 8]
@@ -140,13 +140,14 @@ OPTIONS:
 
 ```bash
 decompress [OPTIONS]
-OPTIONS: 
-    -h,--help       Show this help message
-    -o,--output     Set output file
-    -i,--input      Set input file
-    -v,--version    Get utility version
-    -T,--threads    Multi-thread decompression
-    -V,--verbose    Enable verbose mode
+OPTIONS:
+    -h,--help          Show this help message
+    -o,--output        Set output file
+    -i,--input         Set input file
+    -v,--version       Get utility version
+    -T,--threads       Multi-thread decompression
+    -V,--verbose       Enable verbose mode
+    -d,--decompress    This flag is deprecated and has no effect
 ```
 
 ### Obtain Test Data

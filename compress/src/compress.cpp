@@ -74,19 +74,19 @@ Arguments::predefined_args_t arguments = {
         .name = "no-huffman",
         .short_name = 'H',
         .value_required = false,
-        .explanation = "Disable Huffman compression size comparison"
+        .explanation = "Disable Huffman compression"
     },
     Arguments::single_arg_t {
         .name = "no-lzw",
         .short_name = 'L',
         .value_required = false,
-        .explanation = "Disable LZW compression size comparison"
+        .explanation = "Disable LZW compression"
     },
     Arguments::single_arg_t {
         .name = "no-arithmetic",
         .short_name = 'R',
         .value_required = false,
-        .explanation = "Disable Arithmetical compression size comparison"
+        .explanation = "Disable Arithmetical compression"
     },
     Arguments::single_arg_t {
         .name = "archive",
