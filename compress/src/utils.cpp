@@ -31,6 +31,8 @@
 #include "log.hpp"
 #include <sstream>
 
+#undef min
+
 void set_binary()
 {
 #ifdef WIN32
@@ -94,7 +96,7 @@ bool speed_from_time(
 {
     auto add_sample = [&](const uint64_t sample)->void
     {
-        if (const uint64_t sample_size = min(static_cast<unsigned long>(original_size / BLOCK_SIZE), 256ul);
+        if (const uint64_t sample_size = std::min(static_cast<unsigned long>(original_size / BLOCK_SIZE), 256ul);
             seconds_left_sample_space->size() <= sample_size)
         {
             seconds_left_sample_space->push_back(sample);
