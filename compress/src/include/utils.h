@@ -61,4 +61,6 @@ bool speed_from_time(
     uint64_t original_size = 0,
     std::vector < uint64_t > * seconds_left_sample_space = nullptr);
 
+bool is_utf8();
+
 #endif //UTILS_H

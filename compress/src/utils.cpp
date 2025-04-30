@@ -137,3 +137,66 @@ bool speed_from_time(
 
     return false;
 }
+
+std::string getEnvVar(const std::string &);
+bool is_utf8()
+{
+    static bool I_have_checked_and_it_is_true = false;
+    static bool I_have_checked_and_it_is_false = false;
+
+    if (I_have_checked_and_it_is_true) {
+        return true;
+    }
+
+    if (I_have_checked_and_it_is_false) {
+        return false;
+    }
+
+#ifdef WIN32
+    // Enable if possible
+    if (!SetConsoleOutputCP(CP_UTF8)) {
+#ifdef __DEBUG__
+        debug::log(debug::to_stderr, debug::debug_log, "UTF-8 disabled since SetConsoleOutputCP failed\n");
+#endif
+        I_have_checked_and_it_is_false = true;
+        return false;
+    }
+#endif // WIN32
+
+    const auto lang = getEnvVar("LANG");
+    const auto lc_ctype = getEnvVar("LC_CTYPE");
+
+    if (lang.find("UTF-8") != std::string::npos) {
+#ifdef __DEBUG__
+        debug::log(debug::to_stderr, debug::debug_log, "UTF-8 enabled since $LANG has UTF-8 indicator\n");
+#endif
+        I_have_checked_and_it_is_true = true;
+        return true;
+    }
+
+    if (lc_ctype.find("UTF-8") != std::string::npos) {
+#ifdef __DEBUG__
+        debug::log(debug::to_stderr, debug::debug_log, "UTF-8 enabled since $LC_CTYPE has UTF-8 indicator\n");
+#endif
+        I_have_checked_and_it_is_true = true;
+        return true;
+    }
+
+#ifdef WIN32
+    if (const auto WT_SESSION = getEnvVar("WT_SESSION"); // New Windows Terminal (Win11)
+        !WT_SESSION.empty())
+    {
+#ifdef __DEBUG__
+        debug::log(debug::to_stderr, debug::debug_log, "UTF-8 enabled since this is the new Windows 11 Terminal\n");
+#endif
+        I_have_checked_and_it_is_true = true;
+        return true;
+    }
+#endif
+
+#ifdef __DEBUG__
+    debug::log(debug::to_stderr, debug::debug_log, "UTF-8 disabled since all methods failed\n");
+#endif
+    I_have_checked_and_it_is_false = true;
+    return false;
+}

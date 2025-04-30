@@ -521,9 +521,9 @@ uint64_t find_max(const std::vector<Type> & data)
 using table_t = std::vector<std::pair<std::string, std::pair < std::string, std::string> >>;
 void print_table(const std::string & title, table_t & content)
 {
-    constexpr auto split = static_cast<char>(179);
-    constexpr auto head_joint = static_cast<char>(194);
-    constexpr auto head = static_cast<char>(196);
+    const std::string split = is_utf8() ? "│" : "|";
+    const std::string head_joint = is_utf8() ? "┬" : "-";
+    const std::string head = is_utf8() ? "─" : "-";
 
     // 1. find max length of entry and keys
     std::vector<uint64_t> key_len, val_len, unit_len;
@@ -534,14 +534,24 @@ void print_table(const std::string & title, table_t & content)
         unit_len.push_back(val.second.size());
     }
 
+    auto make_str = [](const uint64_t len, const std::string & key)->std::string
+    {
+        std::string result;
+        for (uint64_t i = 0; i < len; i++) {
+            result.append(key);
+        }
+
+        return result;
+    };
+
     const auto max_key_len = find_max(key_len);
     const auto max_val_len = find_max(val_len);
     const auto max_unit_len = find_max(unit_len);
     const auto title_starting = (max_key_len + max_val_len + max_unit_len + 4 - title.size()) / 2;
     debug::log(debug::to_stderr, debug::info_log, std::string(title_starting, ' '), title, "\n");
     debug::log(debug::to_stderr, debug::info_log,
-        std::string(max_key_len + 2, head), head_joint,
-        std::string(max_val_len + 1 + max_unit_len, head), "\n");
+        make_str(max_key_len + 2, head), head_joint,
+        make_str(max_val_len + 1 + max_unit_len, head), "\n");
     for (const auto & [key, val] : content)
     {
         debug::log(debug::to_stderr, debug::info_log,
