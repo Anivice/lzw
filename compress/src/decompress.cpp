@@ -27,7 +27,6 @@
 #include <chrono>
 #include "Huffman.h"
 #include <filesystem>
-
 #include "arithmetic.h"
 
 namespace fs = std::filesystem;
@@ -68,6 +67,12 @@ Arguments::predefined_args_t arguments = {
         .short_name = 'V',
         .value_required = false,
         .explanation = "Enable verbose mode"
+    },
+    Arguments::single_arg_t {
+        .name = "decompress",
+        .short_name = 'd',
+        .value_required = false,
+        .explanation = "This flag is deprecated and has no effect"
     },
 };
 
@@ -127,12 +132,13 @@ bool decompress(std::basic_istream<char>& input, std::basic_ostream<char>& outpu
             in_buffer.second.clear();
             break;
         }
+
+        processed_size += in_buffer.second.size() + 3;
     }
 
     auto decompress_lzw_block = [&](std::vector < uint8_t > * in_buffer,
         std::vector < uint8_t > * out_buffer)->void
     {
-        processed_size += in_buffer->size();
         lzw <LZW_COMPRESSION_BIT_SIZE> decompressor(*in_buffer, *out_buffer);
         decompressor.decompress();
     };
@@ -140,7 +146,6 @@ bool decompress(std::basic_istream<char>& input, std::basic_ostream<char>& outpu
     auto decompress_huffman_lzw_block = [&](std::vector < uint8_t > * in_buffer,
     std::vector < uint8_t > * out_buffer)->void
     {
-        processed_size += in_buffer->size();
         std::vector < uint8_t > lzw_decompressed;
         decompress_lzw_block(in_buffer, &lzw_decompressed);
         Huffman HuffmanDecompressor(lzw_decompressed, *out_buffer);
@@ -150,7 +155,6 @@ bool decompress(std::basic_istream<char>& input, std::basic_ostream<char>& outpu
     auto decompress_arithmetic_block = [&](std::vector < uint8_t > * in_buffer,
     std::vector < uint8_t > * out_buffer)->void
     {
-        processed_size += in_buffer->size();
         std::vector < uint8_t > input_stream = *in_buffer, output_stream;
         arithmetic::Decode decompressor(input_stream, output_stream);
         decompressor.decode();
@@ -162,7 +166,6 @@ bool decompress(std::basic_istream<char>& input, std::basic_ostream<char>& outpu
     auto raw_copy_over = [&](std::vector < uint8_t > * in_buffer,
     std::vector < uint8_t > * out_buffer)->void
     {
-        processed_size += in_buffer->size();
         out_buffer->reserve(out_buffer->size() + in_buffer->size());
         out_buffer->insert(end(*out_buffer), begin(*in_buffer), end(*in_buffer));
         in_buffer->clear();
@@ -207,10 +210,6 @@ bool decompress(std::basic_istream<char>& input, std::basic_ostream<char>& outpu
 
 void decompress_from_stdin()
 {
-    if (!is_stdout_pipe()) {
-        throw std::runtime_error("Compression data cannot be written to console");
-    }
-
     // Set stdin and stdout to binary mode
     set_binary();
     char magick_buff[3];
@@ -276,6 +275,10 @@ void decompress_file(const std::string& in, const std::string& out)
             seconds_left_sample_space.push_back(sample);
         }
     };
+
+    if (verbose) {
+        debug::log(debug::to_stderr, debug::info_log, "\n");
+    }
 
     const auto before = std::chrono::system_clock::now();
 
@@ -396,7 +399,7 @@ int main(const int argc, const char** argv)
         verbose = static_cast<Arguments::args_t>(args).contains("verbose");
         if (verbose) {
             debug::set_log_level(debug::L_INFO_FG);
-            debug::log(debug::to_stderr, debug::info_log, "Verbose mode enabled\n\n");
+            debug::log(debug::to_stderr, debug::info_log, "Verbose mode enabled\n");
         }
 
         if (static_cast<Arguments::args_t>(args).contains("input"))

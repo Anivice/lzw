@@ -31,15 +31,15 @@
 #include "log.hpp"
 #include <sstream>
 
-bool is_stdout_pipe()
-{
-#ifdef WIN32
-    const DWORD fileType = GetFileType(GetStdHandle(STD_OUTPUT_HANDLE));
-    return (fileType == FILE_TYPE_PIPE);
-#else
-    return !isatty(fileno(stdout));
-#endif
-}
+// bool is_stdout_pipe()
+// {
+// #ifdef WIN32
+//     const DWORD fileType = GetFileType(GetStdHandle(STD_OUTPUT_HANDLE));
+//     return (fileType == FILE_TYPE_PIPE);
+// #else
+//     return !isatty(fileno(stdout));
+// #endif
+// }
 
 void set_binary()
 {

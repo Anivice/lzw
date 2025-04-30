@@ -366,8 +366,9 @@ bool compress(std::basic_istream<char>& input, std::basic_ostream<char>& output)
             in_buffer.clear();
             break;
         }
-
-        processed_size += actual_size;
+        if (verbose) {
+            processed_size += actual_size;
+        }
         in_buffer.resize(actual_size);
     }
 
@@ -389,8 +390,11 @@ bool compress(std::basic_istream<char>& input, std::basic_ostream<char>& output)
     // write data in order
     for (unsigned i = 0; i < thread_count; ++i) {
         auto & out_buffer = out_buffers[i];
-        if (!out_buffer.empty()) {
-            compressed_size += static_cast<int64_t>(out_buffer.size());
+        if (!out_buffer.empty())
+        {
+            if (verbose) {
+                compressed_size += static_cast<int64_t>(out_buffer.size());
+            }
             output.write(reinterpret_cast<char*>(out_buffer.data()), static_cast<std::streamsize>(out_buffer.size()));
         }
     }
@@ -400,15 +404,15 @@ bool compress(std::basic_istream<char>& input, std::basic_ostream<char>& output)
 
 void compress_from_stdin()
 {
-    if (!is_stdout_pipe()) {
-        throw std::runtime_error("Compression data cannot be written to console");
-    }
-
     // Set stdin and stdout to binary mode
     set_binary();
     std::cout.write((char*)(magic), sizeof(magic));
     std::cout.write((char*)(&BLOCK_SIZE), sizeof(BLOCK_SIZE));
-    compressed_size += sizeof(magic) + sizeof(BLOCK_SIZE);
+
+    if (verbose) {
+        compressed_size += sizeof(magic) + sizeof(BLOCK_SIZE);
+    }
+
     while (std::cin.good()) {
         if (!compress(std::cin, std::cout)) {
             break;
@@ -453,11 +457,19 @@ void compress_file(const std::string& in, const std::string& out)
         }
     };
 
+    if (verbose) {
+        debug::log(debug::to_stderr, debug::info_log, "\n");
+    }
+
     const auto before = std::chrono::system_clock::now();
 
     output_file.write((char*)(magic), sizeof(magic));
     output_file.write((char*)(&BLOCK_SIZE), sizeof(BLOCK_SIZE));
-    compressed_size += sizeof(magic) + sizeof(BLOCK_SIZE);
+
+    if (verbose) {
+        compressed_size += sizeof(magic) + sizeof(BLOCK_SIZE);
+    }
+
     while (input_file.good())
     {
         if (!compress(input_file, output_file)) {
@@ -629,7 +641,7 @@ int main(const int argc, const char** argv)
         verbose = static_cast<Arguments::args_t>(args).contains("verbose");
         if (verbose) {
             debug::set_log_level(debug::L_INFO_FG);
-            debug::log(debug::to_stderr, debug::info_log, "Verbose mode enabled\n\n");
+            debug::log(debug::to_stderr, debug::info_log, "Verbose mode enabled\n");
         }
 
         disable_lzw = static_cast<Arguments::args_t>(args).contains("no-lzw");
