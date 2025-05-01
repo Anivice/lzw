@@ -2,8 +2,7 @@
 #define REPEATOR_H
 
 #include <vector>
-#include <ranges>
-#include <algorithm>
+#include <cstdint>
 
 namespace repeator {
     constexpr uint8_t none = 0;

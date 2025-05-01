@@ -1,4 +1,7 @@
 #include "repeator.h"
+#include <utility>
+#include <ranges>
+#include <algorithm>
 
 namespace repeator
 {
