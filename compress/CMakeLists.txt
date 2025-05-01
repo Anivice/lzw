@@ -52,6 +52,7 @@ add_library(external STATIC
         src/log.cpp src/include/log.hpp
         src/arithmetic.cpp src/include/arithmetic.h
         src/repeator.cpp src/include/repeator.h
+        src/transformer.cpp src/include/transformer.h
 )
 
 add_executable(compress src/compress.cpp)
@@ -63,24 +64,17 @@ target_link_libraries(decompress PRIVATE external)
 target_link_libraries(entropy PRIVATE external)
 
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
-    add_executable(bitwise tests/bitwise.cpp
-            tests/arithmetic.cpp)
-    target_link_libraries(bitwise external)
-    add_test(NAME "General_Bitwise_operations" COMMAND ${CMAKE_CURRENT_BINARY_DIR}/bitwise)
 
-    add_executable(Huffman_test tests/Huffman.cpp)
-    target_link_libraries(Huffman_test external)
-    add_test(NAME "General_Huffman_operations" COMMAND ${CMAKE_CURRENT_BINARY_DIR}/Huffman_test)
+    function(add_unit_test NAME)
+        add_executable(${NAME}_test tests/${NAME}.cpp)
+        target_link_libraries(${NAME}_test external)
+        add_test(NAME "${NAME}_test" COMMAND ${CMAKE_CURRENT_BINARY_DIR}/${NAME}_test)
+    endfunction()
 
-    add_executable(human_readable_test tests/human_readable.cpp)
-    target_link_libraries(human_readable_test external)
-    add_test(NAME "Human_readable_dates" COMMAND ${CMAKE_CURRENT_BINARY_DIR}/human_readable_test)
-
-    add_executable(arithmetic_test tests/arithmetic.cpp)
-    target_link_libraries(arithmetic_test external)
-    add_test(NAME "arithmetic_test" COMMAND ${CMAKE_CURRENT_BINARY_DIR}/arithmetic_test)
-
-    add_executable(repeator_test tests/repeator.cpp)
-    target_link_libraries(repeator_test external)
-    add_test(NAME "repeator_test" COMMAND ${CMAKE_CURRENT_BINARY_DIR}/repeator_test)
+    add_unit_test(bitwise)
+    add_unit_test(Huffman)
+    add_unit_test(human_readable)
+    add_unit_test(arithmetic)
+    add_unit_test(repeator)
+    add_unit_test(transformer)
 endif ()
