@@ -136,7 +136,7 @@ bool decompress(std::basic_istream<char>& input, std::basic_ostream<char>& outpu
         processed_size += in_buffer.second.size() + 3;
     }
 
-    auto decompress_lzw_block = [&](std::vector < uint8_t > * in_buffer,
+    auto decompress_lzw_block = [](std::vector < uint8_t > * in_buffer,
         std::vector < uint8_t > * out_buffer)->void
     {
         lzw <LZW_COMPRESSION_BIT_SIZE> decompressor(*in_buffer, *out_buffer);
@@ -152,15 +152,19 @@ bool decompress(std::basic_istream<char>& input, std::basic_ostream<char>& outpu
         HuffmanDecompressor.decompress();
     };
 
-    auto decompress_arithmetic_block = [&](std::vector < uint8_t > * in_buffer,
+    auto decompress_arithmetic_block = [](std::vector < uint8_t > * in_buffer,
     std::vector < uint8_t > * out_buffer)->void
     {
-        std::vector < uint8_t > input_stream = *in_buffer, output_stream;
-        arithmetic::Decode decompressor(input_stream, output_stream);
+        arithmetic::Decode decompressor(*in_buffer, *out_buffer);
         decompressor.decode();
-        out_buffer->reserve(output_stream.size() + out_buffer->size());
-        out_buffer->insert(end(*out_buffer), begin(output_stream), end(output_stream));
-        in_buffer->clear();
+    };
+
+    auto decompress_arithmetic_lzw_block = [&](std::vector < uint8_t > * in_buffer,
+        std::vector < uint8_t > * out_buffer)->void
+    {
+        std::vector < uint8_t > lzw_decompressed;
+        decompress_lzw_block(in_buffer, &lzw_decompressed);
+        decompress_arithmetic_block(&lzw_decompressed, out_buffer);
     };
 
     auto raw_copy_over = [&](std::vector < uint8_t > * in_buffer,
@@ -184,6 +188,8 @@ bool decompress(std::basic_istream<char>& input, std::basic_ostream<char>& outpu
                 threads.emplace_back(decompress_arithmetic_block, &in_buffers[i].second, &out_buffers[i]);
             } else if (in_buffers[i].first == used_plain) {
                 threads.emplace_back(raw_copy_over, &in_buffers[i].second, &out_buffers[i]);
+            } else if (in_buffers[i].first == used_arithmetic_lzw) {
+                threads.emplace_back(decompress_arithmetic_lzw_block, &in_buffers[i].second, &out_buffers[i]);
             } else {
                 throw std::runtime_error("Unknown compression method, corrupted data?");
             }

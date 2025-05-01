@@ -35,7 +35,8 @@ int main()
     /*  We have 29 symbols, with 13 distinctive symbols */
     };
 
-    std::vector < uint8_t > input = data, output, output2;
+    const std::vector < uint8_t > data2(16384, 0);
+    std::vector < uint8_t > input = data2, output, output2;
 
     arithmetic::Encode compressor(input, output);
     compressor.encode();

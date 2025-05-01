@@ -113,15 +113,25 @@ std::atomic < bool > verbose = false;
 std::atomic < uint64_t > lzw_compressed_blocks = 0;
 std::atomic < uint64_t > huffman_compressed_blocks = 0;
 std::atomic < uint64_t > arithmetic_compressed_blocks = 0;
+std::atomic < uint64_t > arithmetic_lzw_compressed_blocks = 0;
 std::atomic < uint64_t > raw_blocks = 0;
 std::atomic < bool > disable_lzw = false;
 std::atomic < bool > disable_huffman = false;
 std::atomic < bool > disable_arithmetic = false;
 std::map <uint8_t, uint64_t> global_frequency_map;
+std::map <uint8_t, uint64_t> lzw_frequency_map;
+std::map <uint8_t, uint64_t> huffman_frequency_map;
+std::map <uint8_t, uint64_t> arithmetic_frequency_map;
+std::map <uint8_t, uint64_t> arithmetic_lzw_frequency_map;
+std::map <uint8_t, uint64_t> raw_frequency_map;
 std::atomic < float > entropy_threshold = 7.5;
 
 long double entropy_of(const std::vector<uint8_t>& data, std::map <uint8_t, uint64_t> & frequency_map)
 {
+    if (frequency_map.empty()) {
+        return 0;
+    }
+
     for (const auto & code : data) {
         frequency_map[code]++;
     }
@@ -143,7 +153,20 @@ long double entropy_of(const std::vector<uint8_t>& data, std::map <uint8_t, uint
         entropy += entropy_sig;
     }
     entropy = -entropy;
-    return entropy;
+    return std::abs(entropy); // remove -0.0000
+}
+
+inline long double entropy_of(const std::vector<uint8_t>& data)
+{
+    std::map <uint8_t, uint64_t> frequency_map;
+    return entropy_of(data, frequency_map);
+}
+
+inline void record_freq(const std::vector<uint8_t>& data, std::map <uint8_t, uint64_t> & frequency_map)
+{
+    for (const auto & symbol : data) {
+        frequency_map[symbol]++;
+    }
 }
 
 void compress_on_one_block(const std::vector<uint8_t> * in_buffer, std::vector<uint8_t> * out_buffer)
@@ -152,9 +175,7 @@ void compress_on_one_block(const std::vector<uint8_t> * in_buffer, std::vector<u
     std::mutex mutex_in, mutex_out;
 
     if (verbose) {
-        for (const auto & symbol : *in_buffer) {
-            global_frequency_map[symbol]++;
-        }
+        record_freq(*in_buffer, global_frequency_map);
     }
 
     auto LZW9Compress = [](std::vector<uint8_t> & input, std::vector<uint8_t> & output)->void
@@ -231,19 +252,30 @@ void compress_on_one_block(const std::vector<uint8_t> * in_buffer, std::vector<u
             std::lock_guard lock(mutex_out);
             size_map.emplace_back(out2, used_huffman);
         }
-
     };
 
     auto compression_arithmetic_block = [&]()->void
     {
-        std::vector<uint8_t> in, out;
-
-        {
+        std::vector<uint8_t> in, out; {
             std::lock_guard lock(mutex_in);
             in = *in_buffer;
         }
 
         ArithmeticCompress(in, out);
+        if (constexpr long double lzw_overlay_entropy_threshold = 6;
+            entropy_of(out) < lzw_overlay_entropy_threshold)
+        {
+            std::vector<uint8_t> lzw_overlay_out;
+            std::vector<uint8_t> lzw_overlay_in;
+            lzw_overlay_in.reserve(out.size() - 2); // pop 16bit size header
+            lzw_overlay_in.insert(end(lzw_overlay_in), begin(out) + 2, end(out));
+            LZW9Compress(lzw_overlay_in, lzw_overlay_out);
+
+            {
+                std::lock_guard lock(mutex_out);
+                size_map.emplace_back(lzw_overlay_out, used_arithmetic_lzw);
+            }
+        }
 
         {
             std::lock_guard lock(mutex_out);
@@ -271,8 +303,7 @@ void compress_on_one_block(const std::vector<uint8_t> * in_buffer, std::vector<u
     bool disable_compression = false;
     if (!(disable_lzw && disable_huffman && disable_arithmetic))
     {
-        std::map <uint8_t, uint64_t> freq_map;
-        if (const auto current_entropy = entropy_of(*in_buffer, freq_map);
+        if (const auto current_entropy = entropy_of(*in_buffer);
             current_entropy > entropy_threshold)
         {
             disable_compression = true;
@@ -327,14 +358,22 @@ void compress_on_one_block(const std::vector<uint8_t> * in_buffer, std::vector<u
     out_buffer->push_back(compression_method);
     out_buffer->insert(end(*out_buffer), begin(*compression_buffer), end(*compression_buffer));
 
-    if (verbose) {
+    if (verbose)
+    {
         if (compression_method == used_lzw) {
+            record_freq(*compression_buffer, lzw_frequency_map);
             ++lzw_compressed_blocks;
         } else if (compression_method == used_huffman) {
+            record_freq(*compression_buffer, huffman_frequency_map);
             ++huffman_compressed_blocks;
         } else if (compression_method == used_arithmetic) {
+            record_freq(*compression_buffer, arithmetic_frequency_map);
             ++arithmetic_compressed_blocks;
+        } else if (compression_method == used_arithmetic_lzw) {
+            record_freq(*compression_buffer, arithmetic_lzw_frequency_map);
+            ++arithmetic_lzw_compressed_blocks;
         } else if (compression_method == used_plain) {
+            record_freq(*compression_buffer, raw_frequency_map);
             ++raw_blocks;
         }
     }
@@ -551,7 +590,7 @@ void print_table(const std::string & title, table_t & content)
     debug::log(debug::to_stderr, debug::info_log, std::string(title_starting, ' '), title, "\n");
     debug::log(debug::to_stderr, debug::info_log,
         make_str(max_key_len + 2, head), head_joint,
-        make_str(max_val_len + 1 + max_unit_len, head), "\n");
+        make_str(max_val_len + 2 + max_unit_len, head), "\n");
     for (const auto & [key, val] : content)
     {
         debug::log(debug::to_stderr, debug::info_log,
@@ -599,6 +638,21 @@ int main(const int argc, const char** argv)
         {
             if (verbose && processed_size > 0)
             {
+                std::map<uint8_t, uint64_t> compressed_data_freq;
+                auto add_freq_map = [&](const std::map<uint8_t, uint64_t> & freq_map)->void
+                {
+                    for (const auto & [sym, freq] : freq_map) {
+                        compressed_data_freq[sym] += freq;
+                    }
+                };
+
+                add_freq_map(lzw_frequency_map);
+                add_freq_map(huffman_frequency_map);
+                add_freq_map(arithmetic_frequency_map);
+                add_freq_map(arithmetic_lzw_frequency_map);
+                add_freq_map(raw_frequency_map);
+
+                const auto compressed_entropy = entropy_of({}, compressed_data_freq);
                 const auto entropy = entropy_of({}, global_frequency_map);
                 const auto expectation = static_cast<long double>(processed_size) * entropy;
                 auto expectation_int = static_cast<uint64_t>(expectation);
@@ -616,21 +670,6 @@ int main(const int argc, const char** argv)
                 const auto CORatio = static_cast<double>(compressed_size) / static_cast<double>(processed_size);
                 const auto CRRatio = (raw_blocks != 0 ? static_cast<double>(compressed_blocks) / static_cast<double>(raw_blocks) : NAN);
                 const auto CAPercentage = (raw_blocks != 0 ? static_cast<double>(compressed_blocks) / static_cast<double>(total_blocks) * 100.0 : NAN);
-                std::string performance;
-
-                if (expectation_ratio > 1) {
-                    performance = "Not Ideal";
-                } else if (expectation_ratio <= 1 && expectation_ratio > 0.9) {
-                    performance = "Normal";
-                } else if (expectation_ratio <= 0.9 && expectation_ratio > 0.5) {
-                    performance = "Healthy";
-                } else if (expectation_ratio <= 0.5) {
-                    performance = "Largely Exceeded Expectation";
-                }
-
-                if (performance.empty()) {
-                    performance = "Possibly Mono-Contextual Data";
-                }
 
                 const auto processed_size_literal = literalize(processed_size * 8);
                 const auto compressed_size_literal = literalize(compressed_size * 8);
@@ -640,15 +679,21 @@ int main(const int argc, const char** argv)
                 const auto total_blocks_literal = literalize(total_blocks);
                 const auto compressed_blocks_literal = literalize(compressed_blocks);
                 const auto lzw_compressed_blocks_literal = literalize(lzw_compressed_blocks);
+                const auto lzw_entropy_literal = literalize(entropy_of({}, lzw_frequency_map));
                 const auto huffman_compressed_blocks_literal = literalize(huffman_compressed_blocks);
+                const auto huffman_entropy_literal = literalize(entropy_of({}, huffman_frequency_map));
                 const auto arithmetic_compressed_blocks_literal = literalize(arithmetic_compressed_blocks);
+                const auto arithmetic_entropy_literal = literalize(entropy_of({}, arithmetic_frequency_map));
+                const auto arithmetic_lzw_compressed_blocks_literal = literalize(arithmetic_lzw_compressed_blocks);
+                const auto arithmetic_lzw_entropy_literal = literalize(entropy_of({}, arithmetic_lzw_frequency_map));
                 const auto raw_blocks_literal = literalize(raw_blocks);
+                const auto raw_entropy_literal = literalize(entropy_of({}, raw_frequency_map));
                 const auto CRRatio_literal = literalize(CRRatio * 100);
                 const auto CAPercentage_literal = literalize(CAPercentage);
                 const auto entropy_literal = literalize(entropy);
+                const auto compressed_entropy_literal = literalize(compressed_entropy);
                 const auto numerical_bits_expectation_literal = literalize(numerical_bits_expectation);
                 const auto expectation_ratio_literal = literalize(expectation_ratio * 100);
-                const auto performance_literal = literalize(performance);
 
                 table_t table;
 
@@ -661,25 +706,38 @@ int main(const int argc, const char** argv)
                         (std::move(key), std::make_pair<std::string, std::string>(std::move(value), std::move(val_unt))));
                 };
 
-                add_entry("Original size", processed_size_literal, "Bits");
-                add_entry("Compressed size", compressed_size_literal, "Bits");
-                add_entry("Compression ratio", compression_ratio_literal, "%");
-                add_entry("C/O ratio", CORatio_literal, "%");
+                auto split_add = [&](const std::string & key, const std::string & literal)
+                {
+                    const auto literal_int = literal.substr(0, literal.find_first_of('.'));
+                    const auto literal_fraq = literal.substr(literal.find_first_of('.') + 1);
+                    add_entry(key, literal_int, literal_fraq);
+                };
+
+                add_entry("Original Size", processed_size_literal, "Bits");
+                add_entry("Compressed Size", compressed_size_literal, "Bits");
+                add_entry("Compression Ratio", compression_ratio_literal, "%");
+                add_entry("Compressed/Original", CORatio_literal, "%");
                 add_entry("Block Size", BLOCK_SIZE_literal,
                     "Bytes" + ((BLOCK_SIZE > 1024) ? " (" + std::to_string(BLOCK_SIZE / 1024) + " KB)" : ""));
-                add_entry("Block count", total_blocks_literal, "");
-                add_entry("Compressed blocks", compressed_blocks_literal, "");
-                add_entry(" - LZW blocks", lzw_compressed_blocks_literal, "");
-                add_entry(" - Huffman blocks", huffman_compressed_blocks_literal, "");
-                add_entry(" - Arithmetic blocks", arithmetic_compressed_blocks_literal, "");
-                add_entry("Raw blocks", raw_blocks_literal, "");
-                add_entry("C/R ratio", CRRatio_literal, "%");
-                add_entry("C/A percentage", CAPercentage_literal, "%");
-                add_entry("Raw data entropy", entropy_literal, "");
+                add_entry("Total Blocks", total_blocks_literal, "");
+                add_entry("Compressed Blocks", compressed_blocks_literal, "");
+                add_entry(" - LZW Blocks", lzw_compressed_blocks_literal, "");
+                split_add("   - LZW Compressed Entropy", lzw_entropy_literal);
+                add_entry(" - Huffman Blocks", huffman_compressed_blocks_literal, "");
+                split_add("   - Huffman Compressed Entropy", huffman_entropy_literal);
+                add_entry(" - Arithmetic Blocks", arithmetic_compressed_blocks_literal, "");
+                split_add("   - Arithmetic Compressed Entropy", arithmetic_entropy_literal);
+                add_entry(" - Arithmetic LZW'd Blocks", arithmetic_lzw_compressed_blocks_literal, "");
+                split_add("   - Arithmetic LZW'd Entropy", arithmetic_lzw_entropy_literal);
+                add_entry("Raw Blocks", raw_blocks_literal, "");
+                split_add(" - Raw Block Entropy", raw_entropy_literal);
+                add_entry("Compressed/Raw", CRRatio_literal, "%");
+                add_entry("Compressed/All", CAPercentage_literal, "%");
+                add_entry("Original Data Entropy", entropy_literal, "");
+                add_entry("Compressed Data Entropy", compressed_entropy_literal, "");
                 add_entry("Expectation", numerical_bits_expectation_literal, "Bits");
-                add_entry("AB/EB percentage", expectation_ratio_literal, "%");
-                add_entry("Performance", performance_literal, "");
-                print_table("GENERAL PERFORMANCE", table);
+                add_entry("Compressed/Expectation", expectation_ratio_literal, "%");
+                print_table("SUMMARY", table);
             }
         };
 
