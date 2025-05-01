@@ -2,14 +2,14 @@
 
 ## Introduction
 
-This is an implementation of the two well-known and widely deployed compression algorithms,
-namely Lempel-Ziv-Welch (LZW) and Huffman Coding.
+This is an implementation of the three well-known and widely deployed compression algorithms,
+namely Lempel-Ziv-Welch (LZW), Huffman Coding and Arithmetic Coding.
 
 Lempel-Ziv-Welchm, or LZW in short for the sake of convenience naming,
 typically employs a fixed bit size for the result in its coding style,
-though the coding algorithm never specifically detailed any bit size and varying bit length 
+though the coding algorithm never specifically detailed any bit size and varying bit-length 
 in encoded data is fairly common.
-Huffman Coding, on the other hand, is known for its varying bit length in encoded data.
+Huffman Coding, on the other hand, is known for its varying bit-length in encoded data.
 
 This implementation mixes these two algorithms in the hope that it can reach
 the maximum compression result possible.
@@ -36,6 +36,30 @@ occupies less storage space and higher performance cost.
 its occupied bit size is not fixed and can change dynamically,
 and for all symbols, their unit size does not necessarily agree with each other.
 
+### Compression Ratio
+
+Our definition of a compression ratio is "amount of data compressed in the process."
+Specifically,
+
+$$\text{Compression Ratio} = \frac{\text{Original Data Length} - \text{Data Length after Compression}}{\text{Original Data Length}} \times 100 \\%$$
+
+Higher compression ratio means better result.
+Compression ratio can be a negative value, indicating data expanded after compression,
+an extremely poor result.
+
+### Data Entropy
+
+For a set of discrete random variable $D$, there exists a value $H$ called Entropy,
+describing the approximated bit length necessary to express the entire data $D$,
+such that
+
+$$
+H(D) = - \sum_{i=1}^{n} p(d_i) \log_2 p(d_i)
+$$
+
+Where $p(d_i)$ is the probability of the $i\text{-th}$ outcome.  
+The more close $H(D)$ goes towards 8, the less compression ratio is expected.
+
 ### Lempel-Ziv-Welchm Algorithm
 
 Lempel-Ziv-Welchm algorithm can encode and decode data
@@ -52,16 +76,13 @@ High frequency data are encoded with shorter bits and low frequency data are enc
 resulting in fewer bits used in general.
 Huffman Coding requires a dictionary in the decoding process.
 
-### Compression Ratio
+### Arithmetic Coding
 
-Our definition of a compression ratio is "amount of data compressed in the process."
-Specifically,
-
-$$\text{Compression Ratio} = \frac{\text{Original Data Length} - \text{Data Length after Compression}}{\text{Original Data Length}} \times 100 \\%$$
-
-Higher compression ratio means better result.
-Compression ratio can be a negative value, indicating data expanded after compression,
-an extremely poor result.
+Arithmetic Coding is an improved version of Huffman Coding.
+It is most suitable for data types fits Huffman Coding well, i.e.,
+data with various frequencies.
+Arithmetic Coding narrows the entire data into a single number within $[0, 1)$,
+using a probability model formed from the input data.
 
 ## Implementations
 
@@ -82,6 +103,7 @@ This is also the reason why Huffman Coding in our example always underperformed 
 in almost every example.
 As a compensation for this, we compress the result of Huffman Coding again, with LZW.
 This helps further reduce redundancies in the Huffman Coding result.
+The Same strategy is used in a low entropy result from Arithmetic Coding.
 
 However, some patterns are still more likely to have a higher compression ratio for LZW.
 In this implementation, we did parallel compression.
@@ -131,6 +153,7 @@ OPTIONS:
     -H,--no-huffman           Disable Huffman compression
     -L,--no-lzw               Disable LZW compression
     -R,--no-arithmetic        Disable Arithmetical compression
+    -W,--no-lzw-overlay       Disable LZW compression overlay on Arithmetical compression result
     -A,--archive              Disable compression
     -B,--block-size           Set block size (in bytes, default 16384 (16KB), 32767 Max (32KB - 1))
     -E,--entropy-threshold    Set entropy threshold within [0, 8]
@@ -168,14 +191,13 @@ git lfs install && git lfs checkout && git lfs pull
 
 ![Compression Result on Example Data](resources/compress-cmd.png)
 
+#### Compression Utility Used As a TAR Filter
+
+![Compression TAR Filter](./resources/compress-cmd2.png)
+
 #### Size Comparison with Windows NTFS Transparent Compression
 
 Windows transparent compression result (Left) is somewhat larger than our result (right).
 
 ![Compression Result Size Comparison with Windows NTFS Transparent Compression](resources/compress.png)
 
-> **NOTE:**  
-> Arithmetic Coding is another compression algorithm specialized for data fitting Huffman Coding,
-> i.e., symbols with a variety of frequencies.
-> However, Arithmetic Coding in this example didn't yield astonishing improvement and
-> healthier data has significantly more compression ratio in Huffman Coding or LZW than Arithmetic Coding.

@@ -89,6 +89,12 @@ Arguments::predefined_args_t arguments = {
         .explanation = "Disable Arithmetical compression"
     },
     Arguments::single_arg_t {
+        .name = "no-lzw-overlay",
+        .short_name = 'W',
+        .value_required = false,
+        .explanation = "Disable LZW compression overlay on Arithmetical compression result"
+    },
+    Arguments::single_arg_t {
         .name = "archive",
         .short_name = 'A',
         .value_required = false,
@@ -118,6 +124,7 @@ std::atomic < uint64_t > raw_blocks = 0;
 std::atomic < bool > disable_lzw = false;
 std::atomic < bool > disable_huffman = false;
 std::atomic < bool > disable_arithmetic = false;
+std::atomic < bool > disable_arithmetic_lzw = false;
 std::map <uint8_t, uint64_t> global_frequency_map;
 std::map <uint8_t, uint64_t> lzw_frequency_map;
 std::map <uint8_t, uint64_t> huffman_frequency_map;
@@ -262,8 +269,8 @@ void compress_on_one_block(const std::vector<uint8_t> * in_buffer, std::vector<u
         }
 
         ArithmeticCompress(in, out);
-        if (constexpr long double lzw_overlay_entropy_threshold = 6;
-            entropy_of(out) < lzw_overlay_entropy_threshold)
+        if (!disable_lzw && !disable_arithmetic_lzw // LZW or LZW overlay flag isn't set as disable
+            && entropy_of(out) < entropy_threshold) // and the entropy of Arithmetic Compress is very bad
         {
             std::vector<uint8_t> lzw_overlay_out;
             std::vector<uint8_t> lzw_overlay_in;
@@ -372,6 +379,7 @@ void compress_on_one_block(const std::vector<uint8_t> * in_buffer, std::vector<u
         } else if (compression_method == used_arithmetic_lzw) {
             record_freq(*compression_buffer, arithmetic_lzw_frequency_map);
             ++arithmetic_lzw_compressed_blocks;
+            ++arithmetic_compressed_blocks;
         } else if (compression_method == used_plain) {
             record_freq(*compression_buffer, raw_frequency_map);
             ++raw_blocks;
@@ -726,9 +734,10 @@ int main(const int argc, const char** argv)
                 add_entry(" - Huffman Blocks", huffman_compressed_blocks_literal, "");
                 split_add("   - Huffman Compressed Entropy", huffman_entropy_literal);
                 add_entry(" - Arithmetic Blocks", arithmetic_compressed_blocks_literal, "");
-                split_add("   - Arithmetic Compressed Entropy", arithmetic_entropy_literal);
-                add_entry(" - Arithmetic LZW'd Blocks", arithmetic_lzw_compressed_blocks_literal, "");
-                split_add("   - Arithmetic LZW'd Entropy", arithmetic_lzw_entropy_literal);
+                add_entry("   - Arithmetic LZW'd Blocks", arithmetic_lzw_compressed_blocks_literal, "");
+                split_add("     - Arithmetic LZW'd Entropy", arithmetic_lzw_entropy_literal);
+                add_entry("   - Arithmetic Bare Blocks", literalize(arithmetic_compressed_blocks - arithmetic_lzw_compressed_blocks), "");
+                split_add("     - Arithmetic Bare Entropy", arithmetic_entropy_literal);
                 add_entry("Raw Blocks", raw_blocks_literal, "");
                 split_add(" - Raw Block Entropy", raw_entropy_literal);
                 add_entry("Compressed/Raw", CRRatio_literal, "%");
@@ -784,6 +793,7 @@ int main(const int argc, const char** argv)
         disable_lzw = static_cast<Arguments::args_t>(args).contains("no-lzw");
         disable_huffman = static_cast<Arguments::args_t>(args).contains("no-huffman");
         disable_arithmetic = static_cast<Arguments::args_t>(args).contains("no-arithmetic");
+        disable_arithmetic_lzw = static_cast<Arguments::args_t>(args).contains("no-lzw-overlay");
 
         if (static_cast<Arguments::args_t>(args).contains("archive")) {
             disable_arithmetic = disable_lzw = disable_huffman = true;
