@@ -90,6 +90,8 @@ std::atomic < uint64_t > processed_size = 0;
     }                                               \
 }
 
+std::vector< uint8_t > cache;
+
 bool decompress(std::basic_istream<char>& input, std::basic_ostream<char>& output)
 {
     if (!input.good()) {
@@ -236,18 +238,35 @@ bool decompress(std::basic_istream<char>& input, std::basic_ostream<char>& outpu
         if (auto & out_buffer = out_buffers[i];
             !out_buffer.empty())
         {
-            std::vector<uint8_t> transformed;
-            transformed.reserve(out_buffer.size());
-            uint16_t viewpoint = 0;
-            reinterpret_cast<uint8_t*>(&viewpoint)[0] = out_buffer[0];
-            reinterpret_cast<uint8_t*>(&viewpoint)[1] = out_buffer[1];
-            const std::string in_buffer_stringview(out_buffer.begin() + 2, out_buffer.end());
-            const auto result = transformer::inverse(in_buffer_stringview, viewpoint);
-            output.write(result.data(), static_cast<std::streamsize>(result.size()));
+            cache.append_range(out_buffer);
+            if (cache.size() >= 128 * 1024 + 3)
+            {
+                uint32_t primary = 0;
+                std::memcpy(&primary, cache.data(), 3);
+                std::vector < uint8_t > buffer(begin(cache) + 3, begin(cache) + 128 * 1024 + 3);
+                cache = std::vector<uint8_t>(begin(cache) + 128 * 1024 + 3, end(cache));
+                const auto result = transformer::inverse(buffer, primary);
+                output.write(reinterpret_cast<const char*>(result.data()), result.size());
+            }
         }
     }
 
     return true;
+}
+
+void flush_cache(std::basic_ostream<char>& output)
+{
+    uint32_t primary = 0;
+    std::memcpy(&primary, cache.data(), 3);
+    std::vector < uint8_t > buffer(begin(cache) + 3, end(cache));
+    std::vector<uint8_t> result;
+    if (cache.size() >= 128 * 1024 + 3) {
+        result = transformer::inverse(buffer, primary);
+    } else {
+        result = transformer::inverse_cpu(buffer, primary);
+    }
+
+    output.write(reinterpret_cast<const char*>(result.data()), result.size());
 }
 
 void decompress_from_stdin()
@@ -287,6 +306,8 @@ void decompress_from_stdin()
                 debug::info_log, ss.str(), "\n");
         }
     }
+
+    flush_cache(std::cout);
 
     if (verbose) {
         debug::log(debug::to_stderr, debug::cursor_on);
@@ -351,6 +372,8 @@ void decompress_file(const std::string& in, const std::string& out)
                 debug::info_log, ss.str(), "\n");
         }
     }
+
+    flush_cache(output_file);
 
     if (verbose) {
         debug::log(debug::to_stderr, debug::cursor_on);

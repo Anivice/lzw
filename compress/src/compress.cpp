@@ -180,24 +180,13 @@ inline void record_freq(const std::vector<uint8_t>& data, std::map <uint8_t, uin
     }
 }
 
-void compress_on_one_block(const std::vector<uint8_t> * in_buffer_, std::vector<uint8_t> * out_buffer)
+void compress_on_one_block(const std::vector<uint8_t> * in_buffer, std::vector<uint8_t> * out_buffer)
 {
     std::vector < std::pair < std::vector<uint8_t> , uint8_t > > size_map;
     std::mutex mutex_in, mutex_out;
 
-    // transform
-    std::vector<uint8_t> transformed;
-    transformed.reserve(in_buffer_->size());
-    const std::string in_buffer_stringview(in_buffer_->begin(), in_buffer_->end());
-    const auto [result, viewpoint] = transformer::forward(in_buffer_stringview);
-    std::vector<uint8_t> in_buffer;
-    in_buffer.reserve(result.size() + 2);
-    in_buffer.push_back(reinterpret_cast<const uint8_t*>(&viewpoint)[0]);
-    in_buffer.push_back(reinterpret_cast<const uint8_t*>(&viewpoint)[1]);
-    in_buffer.insert(end(in_buffer), begin(result), end(result));
-
     if (verbose) {
-        record_freq(in_buffer, global_frequency_map);
+        record_freq(*in_buffer, global_frequency_map);
     }
 
     auto LZW9Compress = [](std::vector<uint8_t> & input, std::vector<uint8_t> & output)->void
@@ -247,7 +236,7 @@ void compress_on_one_block(const std::vector<uint8_t> * in_buffer_, std::vector<
 
         {
             std::lock_guard lock(mutex_in);
-            in = in_buffer;
+            in = *in_buffer;
         }
 
         LZW9Compress(in, out);
@@ -264,7 +253,7 @@ void compress_on_one_block(const std::vector<uint8_t> * in_buffer_, std::vector<
 
         {
             std::lock_guard lock(mutex_in);
-            in = in_buffer;
+            in = *in_buffer;
         }
 
         HuffmanCompress(in, out);
@@ -280,7 +269,7 @@ void compress_on_one_block(const std::vector<uint8_t> * in_buffer_, std::vector<
     {
         std::vector<uint8_t> in, out; {
             std::lock_guard lock(mutex_in);
-            in = in_buffer;
+            in = *in_buffer;
         }
 
         ArithmeticCompress(in, out);
@@ -311,7 +300,7 @@ void compress_on_one_block(const std::vector<uint8_t> * in_buffer_, std::vector<
 
         {
             std::lock_guard lock(mutex_in);
-            in = in_buffer;
+            in = *in_buffer;
         }
 
         CopyOver(in, out);
@@ -328,7 +317,7 @@ void compress_on_one_block(const std::vector<uint8_t> * in_buffer_, std::vector<
 
         {
             std::lock_guard lock(mutex_in);
-            in = in_buffer;
+            in = *in_buffer;
         }
 
         repeator::repeator compressor(in, out);
@@ -348,7 +337,7 @@ void compress_on_one_block(const std::vector<uint8_t> * in_buffer_, std::vector<
     bool disable_compression = false;
     if (!(disable_lzw && disable_huffman && disable_arithmetic))
     {
-        if (const auto current_entropy = entropy_of(in_buffer);
+        if (const auto current_entropy = entropy_of(*in_buffer);
             current_entropy > entropy_threshold)
         {
             disable_compression = true;
@@ -436,12 +425,61 @@ void compress_on_one_block(const std::vector<uint8_t> * in_buffer_, std::vector<
 
 std::atomic < int64_t > processed_size = 0;
 std::atomic < int64_t > compressed_size = 0;
+std::vector < uint8_t > cache;
+uint64_t offset = 0;
+
+class EndOfFile final : std::exception {};
 
 bool compress(std::basic_istream<char>& input, std::basic_ostream<char>& output)
 {
-    if (!input.good()) {
-        return false;
-    }
+    auto read = [&](char * buff, const uint64_t length)->uint64_t
+    {
+        if ((cache.size() - offset) < length)
+        {
+            uint64_t ret = 0;
+            std::memcpy(buff, cache.data() + offset, cache.size() - offset);
+            ret += cache.size() - offset;
+            cache.resize(128 * 1024);
+            input.read(reinterpret_cast<char*>(cache.data()), static_cast<std::streamsize>(cache.size()));
+            const auto actual_size = input.gcount();
+            cache.resize(actual_size);
+
+            if (actual_size == 0) {
+                cache.clear();
+                return ret;
+            }
+
+            std::vector<uint8_t> result;
+            uint64_t primary;
+            if (actual_size < 128 * 1024) {
+                const auto [result_, primary_] = transformer::forward_cpu(cache);
+                result = result_;
+                primary = primary_;
+            } else {
+                const auto [result_, primary_] = transformer::forward(cache);
+                result = result_;
+                primary = primary_;
+            }
+
+            cache.clear();
+            cache.push_back(reinterpret_cast<const uint8_t*>(&primary)[0]);
+            cache.push_back(reinterpret_cast<const uint8_t*>(&primary)[1]);
+            cache.push_back(reinterpret_cast<const uint8_t*>(&primary)[2]);
+            cache.insert(end(cache), begin(result), end(result));
+
+            const auto rsize = std::min(cache.size(), length - ret);
+            std::memcpy(buff + ret, cache.data(), rsize);
+            ret += rsize;
+            offset = rsize;
+            return ret;
+        }
+        else
+        {
+            std::memcpy(buff, cache.data() + offset, length);
+            offset += length;
+            return length;
+        }
+    };
 
     std::vector < std::vector<uint8_t> > in_buffers;
     std::vector < std::vector<uint8_t> > out_buffers;
@@ -454,14 +492,14 @@ bool compress(std::basic_istream<char>& input, std::basic_ostream<char>& output)
     {
         auto & in_buffer = in_buffers[i];
         in_buffer.resize(BLOCK_SIZE);
-        input.read(reinterpret_cast<char*>(in_buffer.data()), static_cast<std::streamsize>(in_buffer.size()));
-        const auto actual_size = input.gcount();
+        const auto actual_size =
+            read(reinterpret_cast<char*>(in_buffer.data()), static_cast<std::streamsize>(in_buffer.size()));
         if (actual_size == 0) {
             in_buffer.clear();
             break;
         }
         if (verbose) {
-            processed_size += actual_size;
+            processed_size += static_cast<long>(actual_size);
         }
         in_buffer.resize(actual_size);
     }
@@ -510,12 +548,9 @@ void compress_from_stdin()
 
     const auto before = std::chrono::system_clock::now();
 
-    while (std::cin.good())
+    while (!std::cin.eof() || !cache.empty())
     {
-        if (!compress(std::cin, std::cout)) {
-            break;
-        }
-
+        compress(std::cin, std::cout);
         if (std::stringstream ss;
             verbose && speed_from_time(before, ss, processed_size))
         {
@@ -566,12 +601,9 @@ void compress_file(const std::string& in, const std::string& out)
         compressed_size += sizeof(magic) + sizeof(BLOCK_SIZE);
     }
 
-    while (input_file.good())
+    while (!input_file.eof() || !cache.empty())
     {
-        if (!compress(input_file, output_file)) {
-            break;
-        }
-
+        compress(input_file, output_file);
         if (std::stringstream ss;
             verbose && speed_from_time(before, ss, processed_size, original_size, &seconds_left_sample_space))
         {

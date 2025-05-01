@@ -18,7 +18,7 @@
 #  SPDX-License-Identifier: GPL-3.0-or-later
 #
 
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.30)
 project(lzw C CXX)
 
 # Set C and C++ standards
@@ -52,8 +52,13 @@ add_library(external STATIC
         src/log.cpp src/include/log.hpp
         src/arithmetic.cpp src/include/arithmetic.h
         src/repeator.cpp src/include/repeator.h
-        src/transformer.cpp src/include/transformer.h
+        src/include/transformer.h
 )
+
+add_library(cubwt STATIC src/libcubwt.cu src/include/libcubwt.cuh)
+target_compile_options(cubwt PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--use_fast_math>)
+
+target_link_libraries(external PUBLIC cubwt)
 
 add_executable(compress src/compress.cpp)
 add_executable(decompress src/decompress.cpp)
