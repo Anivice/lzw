@@ -1,3 +1,23 @@
+/* repeator.cpp
+ *
+ * Copyright 2025 Anivice Ives
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 #include "repeator.h"
 #include <utility>
 #include <ranges>
@@ -18,8 +38,8 @@ namespace repeator
             {
                 output.push_back(none);
                 uint16_t len = input.size();
-                output.push_back(((uint8_t*)&len)[0]);
-                output.push_back(((uint8_t*)&len)[1]);
+                output.push_back(reinterpret_cast<uint8_t *>(&len)[0]);
+                output.push_back(reinterpret_cast<uint8_t *>(&len)[1]);
                 output.insert(end(output), begin(input), end(input));
                 return;
             }

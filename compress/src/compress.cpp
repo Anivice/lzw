@@ -196,8 +196,8 @@ void compress_on_one_block(const std::vector<uint8_t> * in_buffer, std::vector<u
 
         const auto data_len_lzw_tmp = static_cast<uint16_t>(compressed_data_lzw_tmp.size());
         output.reserve(compressed_data_lzw_tmp.size() + 2 + output.size());
-        output.push_back(((uint8_t*)&data_len_lzw_tmp)[0]);
-        output.push_back(((uint8_t*)&data_len_lzw_tmp)[1]);
+        output.push_back(reinterpret_cast<const uint8_t*>(&data_len_lzw_tmp)[0]);
+        output.push_back(reinterpret_cast<const uint8_t*>(&data_len_lzw_tmp)[1]);
         output.insert(end(output), begin(compressed_data_lzw_tmp), end(compressed_data_lzw_tmp));
     };
 
@@ -215,16 +215,16 @@ void compress_on_one_block(const std::vector<uint8_t> * in_buffer, std::vector<u
         compressor.encode();
 
         const auto data_len_arithmetic = static_cast<uint16_t>(out.size());
-        output.push_back(((uint8_t*)&data_len_arithmetic)[0]);
-        output.push_back(((uint8_t*)&data_len_arithmetic)[1]);
+        output.push_back(reinterpret_cast<const uint8_t *>(&data_len_arithmetic)[0]);
+        output.push_back(reinterpret_cast<const uint8_t *>(&data_len_arithmetic)[1]);
         output.insert(end(output), begin(out), end(out));
     };
 
     auto CopyOver = [](std::vector < uint8_t > & in_buffer, std::vector < uint8_t > & out_buffer)->void
     {
         const auto raw_block_size = static_cast<uint16_t>(in_buffer.size());
-        out_buffer.push_back(((uint8_t*)&raw_block_size)[0]);
-        out_buffer.push_back(((uint8_t*)&raw_block_size)[1]);
+        out_buffer.push_back(reinterpret_cast<const uint8_t *>(&raw_block_size)[0]);
+        out_buffer.push_back(reinterpret_cast<const uint8_t *>(&raw_block_size)[1]);
         out_buffer.insert(end(out_buffer), begin(in_buffer), end(in_buffer));
         in_buffer.clear();
     };
@@ -323,8 +323,8 @@ void compress_on_one_block(const std::vector<uint8_t> * in_buffer, std::vector<u
         compressor.encode();
         const auto block_size = static_cast<uint16_t>(out.size());
         std::vector<uint8_t> final;
-        final.push_back(((uint8_t*)&block_size)[0]);
-        final.push_back(((uint8_t*)&block_size)[1]);
+        final.push_back(reinterpret_cast<const uint8_t *>(&block_size)[0]);
+        final.push_back(reinterpret_cast<const uint8_t *>(&block_size)[1]);
         final.insert(end(final), begin(out), end(out));
 
         {
@@ -386,6 +386,10 @@ void compress_on_one_block(const std::vector<uint8_t> * in_buffer, std::vector<u
             compression_buffer = &buffer;
             compression_method = flag;
         }
+    }
+
+    if (!compression_buffer) {
+        throw std::runtime_error("Unknown error occurred");
     }
 
     out_buffer->reserve(BLOCK_SIZE);
@@ -484,7 +488,7 @@ void compress_from_stdin()
 {
     // Set stdin and stdout to binary mode
     set_binary();
-    std::cout.write((char*)(magic), sizeof(magic));
+    std::cout.write(reinterpret_cast<const char *>(magic), sizeof(magic));
     std::cout.write(reinterpret_cast<char *>(&BLOCK_SIZE), sizeof(BLOCK_SIZE));
 
     if (verbose) {
@@ -542,7 +546,7 @@ void compress_file(const std::string& in, const std::string& out)
     std::vector < uint64_t > seconds_left_sample_space;
     const auto before = std::chrono::system_clock::now();
 
-    output_file.write((char*)(magic), sizeof(magic));
+    output_file.write(reinterpret_cast<const char *>(magic), sizeof(magic));
     output_file.write(reinterpret_cast<char *>(&BLOCK_SIZE), sizeof(BLOCK_SIZE));
 
     if (verbose) {
@@ -805,7 +809,7 @@ int main(const int argc, const char** argv)
         if (static_cast<Arguments::args_t>(args).contains("threads"))
         {
             thread_count = std::strtoul(
-            // disregarding all duplications, apply overriding from the last provided option
+            // disregarding all duplications, apply overriding from the last-provided option
                 static_cast<Arguments::args_t>(args).at("threads").back().c_str(),
                 nullptr, 10);
             if (thread_count > std::thread::hardware_concurrency()) {
