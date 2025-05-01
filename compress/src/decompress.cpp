@@ -112,8 +112,14 @@ bool decompress(std::basic_istream<char>& input, std::basic_ostream<char>& outpu
                 return false;
             }
 
+            uint8_t checksum = 0;
+            input.read(reinterpret_cast<char*>(&checksum), sizeof(checksum));
+            if (!input.good()) {
+                return false;
+            }
+
             uint16_t block_size = 0;
-            input.read(reinterpret_cast<char*>(&block_size), sizeof(uint16_t));
+            input.read(reinterpret_cast<char*>(&block_size), sizeof(block_size));
             if (!input.good()) {
                 return false;
             }
@@ -123,6 +129,15 @@ bool decompress(std::basic_istream<char>& input, std::basic_ostream<char>& outpu
             input.read(reinterpret_cast<char*>(in_buffer.second.data()), block_size);
             if (const auto actual_size = input.gcount(); actual_size != block_size) {
                 return false;
+            }
+
+            std::vector<uint8_t> data_pool;
+            data_pool.reserve(block_size + 2);
+            data_pool.push_back(((char*)(&block_size))[0]);
+            data_pool.push_back(((char*)(&block_size))[1]);
+            data_pool.insert(end(data_pool), begin(in_buffer.second), end(in_buffer.second));
+            if (!pass_for_8bit(data_pool, checksum)) {
+                throw std::runtime_error("File corrupted on block with method " + std::to_string(method));
             }
 
             return true;

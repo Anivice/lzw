@@ -63,5 +63,7 @@ bool speed_from_time(
     std::vector < uint64_t > * seconds_left_sample_space = nullptr);
 
 bool is_utf8();
+uint8_t calculate_8bit(const std::vector<uint8_t> & data);
+bool pass_for_8bit(const std::vector<uint8_t> & data, uint8_t);
 
 #endif //UTILS_H

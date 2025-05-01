@@ -200,3 +200,22 @@ bool is_utf8()
     I_have_checked_and_it_is_false = true;
     return false;
 }
+
+uint8_t calculate_8bit(const std::vector<uint8_t> &data)
+{
+    uint8_t result = 0xFF;
+    for (const auto & c : data) {
+        result ^= c;
+    }
+
+    return result;
+}
+
+bool pass_for_8bit(const std::vector<uint8_t> &data, uint8_t checksum)
+{
+    for (const auto & c : data) {
+        checksum ^= c;
+    }
+
+    return (checksum == 0xFF);
+}

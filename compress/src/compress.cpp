@@ -363,6 +363,7 @@ void compress_on_one_block(const std::vector<uint8_t> * in_buffer, std::vector<u
 
     out_buffer->reserve(BLOCK_SIZE);
     out_buffer->push_back(compression_method);
+    out_buffer->push_back(calculate_8bit(*compression_buffer));
     out_buffer->insert(end(*out_buffer), begin(*compression_buffer), end(*compression_buffer));
 
     if (verbose)
