@@ -24,6 +24,7 @@
 #include "utils.h"
 #include "Huffman.h"
 #include "arithmetic.h"
+#include "repeator.h"
 #include <fstream>
 #include <thread>
 #include <chrono>
@@ -121,6 +122,7 @@ std::atomic < uint64_t > huffman_compressed_blocks = 0;
 std::atomic < uint64_t > arithmetic_compressed_blocks = 0;
 std::atomic < uint64_t > arithmetic_lzw_compressed_blocks = 0;
 std::atomic < uint64_t > raw_blocks = 0;
+std::atomic < uint64_t > repeator_blocks = 0;
 std::atomic < bool > disable_lzw = false;
 std::atomic < bool > disable_huffman = false;
 std::atomic < bool > disable_arithmetic = false;
@@ -130,6 +132,7 @@ std::map <uint8_t, uint64_t> lzw_frequency_map;
 std::map <uint8_t, uint64_t> huffman_frequency_map;
 std::map <uint8_t, uint64_t> arithmetic_frequency_map;
 std::map <uint8_t, uint64_t> arithmetic_lzw_frequency_map;
+std::map <uint8_t, uint64_t> repeator_frequency_map;
 std::map <uint8_t, uint64_t> raw_frequency_map;
 std::atomic < float > entropy_threshold = 7.5;
 
@@ -307,6 +310,29 @@ void compress_on_one_block(const std::vector<uint8_t> * in_buffer, std::vector<u
         }
     };
 
+    auto repeator = [&]()->void
+    {
+        std::vector<uint8_t> in, out;
+
+        {
+            std::lock_guard lock(mutex_in);
+            in = *in_buffer;
+        }
+
+        repeator::repeator compressor(in, out);
+        compressor.encode();
+        const auto block_size = static_cast<uint16_t>(out.size());
+        std::vector<uint8_t> final;
+        final.push_back(((uint8_t*)&block_size)[0]);
+        final.push_back(((uint8_t*)&block_size)[1]);
+        final.insert(end(final), begin(out), end(out));
+
+        {
+            std::lock_guard lock(mutex_out);
+            size_map.emplace_back(final, used_repeator);
+        }
+    };
+
     bool disable_compression = false;
     if (!(disable_lzw && disable_huffman && disable_arithmetic))
     {
@@ -335,6 +361,7 @@ void compress_on_one_block(const std::vector<uint8_t> * in_buffer, std::vector<u
 
     // if (disable_compression) {
     no_compression();
+    repeator();
     // }
 
     // external huffman calculation
@@ -384,6 +411,9 @@ void compress_on_one_block(const std::vector<uint8_t> * in_buffer, std::vector<u
         } else if (compression_method == used_plain) {
             record_freq(*compression_buffer, raw_frequency_map);
             ++raw_blocks;
+        } else if (compression_method == used_repeator) {
+            record_freq(*compression_buffer, repeator_frequency_map);
+            ++repeator_blocks;
         }
     }
 }
@@ -455,7 +485,7 @@ void compress_from_stdin()
     // Set stdin and stdout to binary mode
     set_binary();
     std::cout.write((char*)(magic), sizeof(magic));
-    std::cout.write((char*)(&BLOCK_SIZE), sizeof(BLOCK_SIZE));
+    std::cout.write(reinterpret_cast<char *>(&BLOCK_SIZE), sizeof(BLOCK_SIZE));
 
     if (verbose) {
         debug::log(debug::to_stderr, debug::info_log, "\n");
@@ -513,7 +543,7 @@ void compress_file(const std::string& in, const std::string& out)
     const auto before = std::chrono::system_clock::now();
 
     output_file.write((char*)(magic), sizeof(magic));
-    output_file.write((char*)(&BLOCK_SIZE), sizeof(BLOCK_SIZE));
+    output_file.write(reinterpret_cast<char *>(&BLOCK_SIZE), sizeof(BLOCK_SIZE));
 
     if (verbose) {
         debug::log(debug::to_stderr, debug::info_log, "\n");
@@ -660,6 +690,7 @@ int main(const int argc, const char** argv)
                 add_freq_map(arithmetic_frequency_map);
                 add_freq_map(arithmetic_lzw_frequency_map);
                 add_freq_map(raw_frequency_map);
+                add_freq_map(repeator_frequency_map);
 
                 const auto compressed_entropy = entropy_of({}, compressed_data_freq);
                 const auto entropy = entropy_of({}, global_frequency_map);
@@ -673,8 +704,8 @@ int main(const int argc, const char** argv)
                 const auto actual_used_bits = compressed_size * 8;
                 const auto expectation_ratio = (numerical_bits_expectation != 0 ?
                     static_cast<long double>(actual_used_bits) / static_cast<long double>(numerical_bits_expectation) : NAN);
-                const auto total_blocks = lzw_compressed_blocks + huffman_compressed_blocks + arithmetic_compressed_blocks + raw_blocks;
-                const auto compressed_blocks = lzw_compressed_blocks + huffman_compressed_blocks + arithmetic_compressed_blocks;
+                const auto total_blocks = lzw_compressed_blocks + huffman_compressed_blocks + arithmetic_compressed_blocks + raw_blocks + repeator_blocks;
+                const auto compressed_blocks = lzw_compressed_blocks + huffman_compressed_blocks + arithmetic_compressed_blocks + repeator_blocks;
                 const auto compression_ratio = (static_cast<double>(processed_size) - static_cast<double>(compressed_size)) / static_cast<double>(processed_size);
                 const auto CORatio = static_cast<double>(compressed_size) / static_cast<double>(processed_size);
                 const auto CRRatio = (raw_blocks != 0 ? static_cast<double>(compressed_blocks) / static_cast<double>(raw_blocks) : NAN);
@@ -739,6 +770,8 @@ int main(const int argc, const char** argv)
                 split_add("     - Arithmetic LZW'd Entropy", arithmetic_lzw_entropy_literal);
                 add_entry("   - Arithmetic Bare Blocks", literalize(arithmetic_compressed_blocks - arithmetic_lzw_compressed_blocks), "");
                 split_add("     - Arithmetic Bare Entropy", arithmetic_entropy_literal);
+                add_entry(" - Repeator Blocks", literalize(repeator_blocks), "");
+                split_add("   - Repeator Entropy", literalize(entropy_of({}, repeator_frequency_map)));
                 add_entry("Raw Blocks", raw_blocks_literal, "");
                 split_add(" - Raw Block Entropy", raw_entropy_literal);
                 add_entry("Compressed/Raw", CRRatio_literal, "%");

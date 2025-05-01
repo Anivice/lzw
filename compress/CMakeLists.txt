@@ -39,7 +39,7 @@ if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
     enable_testing()
 endif ()
 
-add_compile_definitions(COMPRESS_UTIL_VERSION=\"0.2.7\")
+add_compile_definitions(COMPRESS_UTIL_VERSION=\"0.2.8\")
 
 include_directories(src/include)
 
@@ -51,6 +51,7 @@ add_library(external STATIC
         src/include/numeric.h src/include/numeric.inl
         src/log.cpp src/include/log.hpp
         src/arithmetic.cpp src/include/arithmetic.h
+        src/repeator.cpp src/include/repeator.h
 )
 
 add_executable(compress src/compress.cpp)
@@ -77,5 +78,9 @@ if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
 
     add_executable(arithmetic_test tests/arithmetic.cpp)
     target_link_libraries(arithmetic_test external)
-    add_test(NAME "arithmetic_dates" COMMAND ${CMAKE_CURRENT_BINARY_DIR}/arithmetic_test)
+    add_test(NAME "arithmetic_test" COMMAND ${CMAKE_CURRENT_BINARY_DIR}/arithmetic_test)
+
+    add_executable(repeator_test tests/repeator.cpp)
+    target_link_libraries(repeator_test external)
+    add_test(NAME "repeator_test" COMMAND ${CMAKE_CURRENT_BINARY_DIR}/repeator_test)
 endif ()

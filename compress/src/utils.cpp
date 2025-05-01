@@ -112,7 +112,7 @@ bool speed_from_time(
     {
         const auto bps = processed_size * 8 / duration * 1000;
         if (seconds_left_sample_space) {
-            const uint64_t seconds_left = (original_size - processed_size) / (bps / 8);
+            const uint64_t seconds_left = (bps == 0 ? 0 : (original_size - processed_size) / (bps / 8));
             add_sample(seconds_left);
         }
 

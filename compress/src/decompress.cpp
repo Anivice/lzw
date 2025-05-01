@@ -28,6 +28,8 @@
 #include "Huffman.h"
 #include <filesystem>
 #include "arithmetic.h"
+#include "repeator.h"
+#include <functional>
 
 namespace fs = std::filesystem;
 
@@ -133,8 +135,8 @@ bool decompress(std::basic_istream<char>& input, std::basic_ostream<char>& outpu
 
             std::vector<uint8_t> data_pool;
             data_pool.reserve(block_size + 2);
-            data_pool.push_back(((char*)(&block_size))[0]);
-            data_pool.push_back(((char*)(&block_size))[1]);
+            data_pool.push_back(reinterpret_cast<char *>(&block_size)[0]);
+            data_pool.push_back(reinterpret_cast<char *>(&block_size)[1]);
             data_pool.insert(end(data_pool), begin(in_buffer.second), end(in_buffer.second));
             if (!pass_for_8bit(data_pool, checksum)) {
                 throw std::runtime_error("File corrupted on block with method " + std::to_string(method));
@@ -190,24 +192,47 @@ bool decompress(std::basic_istream<char>& input, std::basic_ostream<char>& outpu
         in_buffer->clear();
     };
 
+    auto decompress_repeator = [&](std::vector < uint8_t > * in_buffer,
+    std::vector < uint8_t > * out_buffer)->void
+    {
+        out_buffer->reserve(out_buffer->size() + in_buffer->size());
+        repeator::repeator decompressor(*in_buffer, *out_buffer);
+        decompressor.decode();
+        in_buffer->clear();
+    };
+
+    using decompress_function_type = std::function<void(std::vector<uint8_t>*, std::vector<uint8_t>*)>;
+    std::map < uint8_t, decompress_function_type > decoder_map;
+    decoder_map.emplace(used_plain, raw_copy_over);
+    decoder_map.emplace(used_huffman, decompress_huffman_lzw_block);
+    decoder_map.emplace(used_lzw, decompress_lzw_block);
+    decoder_map.emplace(used_arithmetic, decompress_arithmetic_block);
+    decoder_map.emplace(used_arithmetic_lzw, decompress_arithmetic_lzw_block);
+    decoder_map.emplace(used_repeator, decompress_repeator);
+
     // create workers
     for (unsigned i = 0; i < thread_count; ++i)
     {
         if (!in_buffers[i].second.empty())
         {
-            if (in_buffers[i].first == used_lzw) {
-                threads.emplace_back(decompress_lzw_block, &in_buffers[i].second, &out_buffers[i]);
-            } else if (in_buffers[i].first == used_huffman) {
-                threads.emplace_back(decompress_huffman_lzw_block, &in_buffers[i].second, &out_buffers[i]);
-            } else if (in_buffers[i].first == used_arithmetic) {
-                threads.emplace_back(decompress_arithmetic_block, &in_buffers[i].second, &out_buffers[i]);
-            } else if (in_buffers[i].first == used_plain) {
-                threads.emplace_back(raw_copy_over, &in_buffers[i].second, &out_buffers[i]);
-            } else if (in_buffers[i].first == used_arithmetic_lzw) {
-                threads.emplace_back(decompress_arithmetic_lzw_block, &in_buffers[i].second, &out_buffers[i]);
-            } else {
+            try {
+                threads.emplace_back(decoder_map.at(in_buffers[i].first), &in_buffers[i].second, &out_buffers[i]);
+            } catch (std::out_of_range&) {
                 throw std::runtime_error("Unknown compression method, corrupted data?");
             }
+            // if (in_buffers[i].first == used_lzw) {
+            //     threads.emplace_back(decompress_lzw_block, &in_buffers[i].second, &out_buffers[i]);
+            // } else if (in_buffers[i].first == used_huffman) {
+            //     threads.emplace_back(decompress_huffman_lzw_block, &in_buffers[i].second, &out_buffers[i]);
+            // } else if (in_buffers[i].first == used_arithmetic) {
+            //     threads.emplace_back(decompress_arithmetic_block, &in_buffers[i].second, &out_buffers[i]);
+            // } else if (in_buffers[i].first == used_plain) {
+            //     threads.emplace_back(raw_copy_over, &in_buffers[i].second, &out_buffers[i]);
+            // } else if (in_buffers[i].first == used_arithmetic_lzw) {
+            //     threads.emplace_back(decompress_arithmetic_lzw_block, &in_buffers[i].second, &out_buffers[i]);
+            // } else {
+            //     throw std::runtime_error("Unknown compression method, corrupted data?");
+            // }
         }
     }
 
@@ -239,7 +264,7 @@ void decompress_from_stdin()
         throw std::runtime_error("Decompression failed due to invalid magick number");
     }
 
-    std::cin.read((char*)(&BLOCK_SIZE), sizeof(BLOCK_SIZE));
+    std::cin.read(reinterpret_cast<char *>(&BLOCK_SIZE), sizeof(BLOCK_SIZE));
     if (BLOCK_SIZE > BLOCK_SIZE_MAX) {
         throw std::runtime_error("Decompression failed due to invalid block size (decompression bomb?)");
     }
@@ -302,7 +327,7 @@ void decompress_file(const std::string& in, const std::string& out)
         throw std::runtime_error("Decompression failed due to invalid magick number");
     }
 
-    input_file.read((char*)(&BLOCK_SIZE), sizeof(BLOCK_SIZE));
+    input_file.read(reinterpret_cast<char *>(&BLOCK_SIZE), sizeof(BLOCK_SIZE));
     if (BLOCK_SIZE > BLOCK_SIZE_MAX) {
         throw std::runtime_error("Decompression failed due to invalid block size (decompression bomb?)");
     }
@@ -394,7 +419,7 @@ int main(const int argc, const char** argv)
         if (static_cast<Arguments::args_t>(args).contains("threads"))
         {
             thread_count = std::strtoul(
-            // disregarding all duplications, apply overriding from the last provided option
+            // disregarding all duplications, apply overriding from the last-provided option
                 static_cast<Arguments::args_t>(args).at("threads").back().c_str(),
                 nullptr, 10);
             if (thread_count > std::thread::hardware_concurrency()) {
