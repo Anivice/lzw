@@ -79,7 +79,7 @@ Huffman Coding requires a dictionary in the decoding process.
 ### Arithmetic Coding
 
 Arithmetic Coding is an improved version of Huffman Coding.
-It is most suitable for data types fits Huffman Coding well, i.e.,
+It is most suitable for data types fitting Huffman Coding well, i.e.,
 data with various frequencies.
 Arithmetic Coding narrows the entire data into a single number within $[0, 1)$,
 using a probability model formed from the input data.
