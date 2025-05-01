@@ -11,7 +11,7 @@ though the coding algorithm never specifically detailed any bit size and varying
 in encoded data is fairly common.
 Huffman Coding, on the other hand, is known for its varying bit-length in encoded data.
 
-This implementation mixes these two algorithms in the hope that it can reach
+This implementation mixes these three algorithms in the hope that it can reach
 the maximum compression result possible.
 
 ## Terminology
