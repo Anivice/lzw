@@ -22,6 +22,7 @@
 #include "argument_parser.h"
 #include "lzw.h"
 #include "utils.h"
+#include "transformer.h"
 #include <fstream>
 #include <thread>
 #include <chrono>
@@ -220,19 +221,6 @@ bool decompress(std::basic_istream<char>& input, std::basic_ostream<char>& outpu
             } catch (std::out_of_range&) {
                 throw std::runtime_error("Unknown compression method, corrupted data?");
             }
-            // if (in_buffers[i].first == used_lzw) {
-            //     threads.emplace_back(decompress_lzw_block, &in_buffers[i].second, &out_buffers[i]);
-            // } else if (in_buffers[i].first == used_huffman) {
-            //     threads.emplace_back(decompress_huffman_lzw_block, &in_buffers[i].second, &out_buffers[i]);
-            // } else if (in_buffers[i].first == used_arithmetic) {
-            //     threads.emplace_back(decompress_arithmetic_block, &in_buffers[i].second, &out_buffers[i]);
-            // } else if (in_buffers[i].first == used_plain) {
-            //     threads.emplace_back(raw_copy_over, &in_buffers[i].second, &out_buffers[i]);
-            // } else if (in_buffers[i].first == used_arithmetic_lzw) {
-            //     threads.emplace_back(decompress_arithmetic_lzw_block, &in_buffers[i].second, &out_buffers[i]);
-            // } else {
-            //     throw std::runtime_error("Unknown compression method, corrupted data?");
-            // }
         }
     }
 
@@ -245,9 +233,17 @@ bool decompress(std::basic_istream<char>& input, std::basic_ostream<char>& outpu
 
     // write data in order
     for (unsigned i = 0; i < thread_count; ++i) {
-        auto & out_buffer = out_buffers[i];
-        if (!out_buffer.empty()) {
-            output.write(reinterpret_cast<char*>(out_buffer.data()), static_cast<std::streamsize>(out_buffer.size()));
+        if (auto & out_buffer = out_buffers[i];
+            !out_buffer.empty())
+        {
+            std::vector<uint8_t> transformed;
+            transformed.reserve(out_buffer.size());
+            uint16_t viewpoint = 0;
+            reinterpret_cast<uint8_t*>(&viewpoint)[0] = out_buffer[0];
+            reinterpret_cast<uint8_t*>(&viewpoint)[1] = out_buffer[1];
+            const std::string in_buffer_stringview(out_buffer.begin() + 2, out_buffer.end());
+            const auto result = transformer::inverse(in_buffer_stringview, viewpoint);
+            output.write(result.data(), static_cast<std::streamsize>(result.size()));
         }
     }
 

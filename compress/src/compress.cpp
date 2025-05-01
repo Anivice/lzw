@@ -25,6 +25,7 @@
 #include "Huffman.h"
 #include "arithmetic.h"
 #include "repeator.h"
+#include "transformer.h"
 #include <fstream>
 #include <thread>
 #include <chrono>
@@ -179,13 +180,24 @@ inline void record_freq(const std::vector<uint8_t>& data, std::map <uint8_t, uin
     }
 }
 
-void compress_on_one_block(const std::vector<uint8_t> * in_buffer, std::vector<uint8_t> * out_buffer)
+void compress_on_one_block(const std::vector<uint8_t> * in_buffer_, std::vector<uint8_t> * out_buffer)
 {
     std::vector < std::pair < std::vector<uint8_t> , uint8_t > > size_map;
     std::mutex mutex_in, mutex_out;
 
+    // transform
+    std::vector<uint8_t> transformed;
+    transformed.reserve(in_buffer_->size());
+    const std::string in_buffer_stringview(in_buffer_->begin(), in_buffer_->end());
+    const auto [result, viewpoint] = transformer::forward(in_buffer_stringview);
+    std::vector<uint8_t> in_buffer;
+    in_buffer.reserve(result.size() + 2);
+    in_buffer.push_back(reinterpret_cast<const uint8_t*>(&viewpoint)[0]);
+    in_buffer.push_back(reinterpret_cast<const uint8_t*>(&viewpoint)[1]);
+    in_buffer.insert(end(in_buffer), begin(result), end(result));
+
     if (verbose) {
-        record_freq(*in_buffer, global_frequency_map);
+        record_freq(in_buffer, global_frequency_map);
     }
 
     auto LZW9Compress = [](std::vector<uint8_t> & input, std::vector<uint8_t> & output)->void
@@ -235,7 +247,7 @@ void compress_on_one_block(const std::vector<uint8_t> * in_buffer, std::vector<u
 
         {
             std::lock_guard lock(mutex_in);
-            in = *in_buffer;
+            in = in_buffer;
         }
 
         LZW9Compress(in, out);
@@ -252,7 +264,7 @@ void compress_on_one_block(const std::vector<uint8_t> * in_buffer, std::vector<u
 
         {
             std::lock_guard lock(mutex_in);
-            in = *in_buffer;
+            in = in_buffer;
         }
 
         HuffmanCompress(in, out);
@@ -268,7 +280,7 @@ void compress_on_one_block(const std::vector<uint8_t> * in_buffer, std::vector<u
     {
         std::vector<uint8_t> in, out; {
             std::lock_guard lock(mutex_in);
-            in = *in_buffer;
+            in = in_buffer;
         }
 
         ArithmeticCompress(in, out);
@@ -299,7 +311,7 @@ void compress_on_one_block(const std::vector<uint8_t> * in_buffer, std::vector<u
 
         {
             std::lock_guard lock(mutex_in);
-            in = *in_buffer;
+            in = in_buffer;
         }
 
         CopyOver(in, out);
@@ -316,7 +328,7 @@ void compress_on_one_block(const std::vector<uint8_t> * in_buffer, std::vector<u
 
         {
             std::lock_guard lock(mutex_in);
-            in = *in_buffer;
+            in = in_buffer;
         }
 
         repeator::repeator compressor(in, out);
@@ -336,7 +348,7 @@ void compress_on_one_block(const std::vector<uint8_t> * in_buffer, std::vector<u
     bool disable_compression = false;
     if (!(disable_lzw && disable_huffman && disable_arithmetic))
     {
-        if (const auto current_entropy = entropy_of(*in_buffer);
+        if (const auto current_entropy = entropy_of(in_buffer);
             current_entropy > entropy_threshold)
         {
             disable_compression = true;
