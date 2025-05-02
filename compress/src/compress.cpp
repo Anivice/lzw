@@ -114,6 +114,12 @@ Arguments::predefined_args_t arguments = {
         .value_required = true,
         .explanation = "Set entropy threshold within [0, 8]"
     },
+    Arguments::single_arg_t {
+        .name = "no-inverse",
+        .short_name = 'N',
+        .value_required = false,
+        .explanation = "Disable BWT transformation before compression. Requires NVIDIA GPU"
+    },
 };
 
 std::atomic < unsigned > thread_count = 1;
@@ -136,6 +142,7 @@ std::map <uint8_t, uint64_t> arithmetic_lzw_frequency_map;
 std::map <uint8_t, uint64_t> repeator_frequency_map;
 std::map <uint8_t, uint64_t> raw_frequency_map;
 std::atomic < float > entropy_threshold = 7.5;
+std::atomic < bool > disable_inverse_compression = false;
 
 long double entropy_of(const std::vector<uint8_t>& data, std::map <uint8_t, uint64_t> & frequency_map)
 {
@@ -450,15 +457,20 @@ bool compress(std::basic_istream<char>& input, std::basic_ostream<char>& output)
             }
 
             std::vector<uint8_t> result;
-            uint64_t primary;
-            if (actual_size < 128 * 1024) {
-                const auto [result_, primary_] = transformer::forward_cpu(cache);
-                result = result_;
-                primary = primary_;
+            uint64_t primary = 0;
+            if (disable_inverse_compression || actual_size < 128 * 1024) {
+                result = cache;
+                primary = -1;
             } else {
-                const auto [result_, primary_] = transformer::forward(cache);
-                result = result_;
-                primary = primary_;
+                if (const auto [result_, primary_] = transformer::forward(cache);
+                    primary_ != 0)
+                {
+                    result = result_;
+                    primary = primary_;
+                } else {
+                    result = cache;
+                    primary = -1;
+                }
             }
 
             cache.clear();
@@ -876,6 +888,7 @@ int main(const int argc, const char** argv)
         disable_huffman = static_cast<Arguments::args_t>(args).contains("no-huffman");
         disable_arithmetic = static_cast<Arguments::args_t>(args).contains("no-arithmetic");
         disable_arithmetic_lzw = static_cast<Arguments::args_t>(args).contains("no-lzw-overlay");
+        disable_inverse_compression = static_cast<Arguments::args_t>(args).contains("no-inverse");
 
         if (static_cast<Arguments::args_t>(args).contains("archive")) {
             disable_arithmetic = disable_lzw = disable_huffman = true;

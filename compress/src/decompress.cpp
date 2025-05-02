@@ -92,6 +92,34 @@ std::atomic < uint64_t > processed_size = 0;
 
 std::vector< uint8_t > cache;
 
+void flush_cache(std::basic_ostream<char>& output)
+{
+    if (cache.empty()) {
+        return;
+    }
+
+    uint32_t primary = 0;
+    std::memcpy(&primary, cache.data(), 3);
+    std::vector < uint8_t > buffer;
+    bool inverse = false;
+    if (cache.size() >= 128 * 1024) {
+        buffer.insert(end(buffer), begin(cache) + 3, begin(cache) + 128 * 1024 + 3);
+        cache = std::vector<uint8_t>(begin(cache) + 128 * 1024 + 3, end(cache));
+        inverse = true;
+    } else {
+        buffer = std::vector<uint8_t>(begin(cache) + 3, end(cache));
+        cache.clear();
+    }
+    std::vector<uint8_t> result;
+    if (inverse && primary != 0xFFFFFF) {
+        result = transformer::inverse(buffer, primary);
+    } else {
+        result = buffer;
+    }
+
+    output.write(reinterpret_cast<const char*>(result.data()), static_cast<long>(result.size()));
+}
+
 bool decompress(std::basic_istream<char>& input, std::basic_ostream<char>& output)
 {
     if (!input.good()) {
@@ -239,34 +267,13 @@ bool decompress(std::basic_istream<char>& input, std::basic_ostream<char>& outpu
             !out_buffer.empty())
         {
             cache.append_range(out_buffer);
-            if (cache.size() >= 128 * 1024 + 3)
-            {
-                uint32_t primary = 0;
-                std::memcpy(&primary, cache.data(), 3);
-                std::vector < uint8_t > buffer(begin(cache) + 3, begin(cache) + 128 * 1024 + 3);
-                cache = std::vector<uint8_t>(begin(cache) + 128 * 1024 + 3, end(cache));
-                const auto result = transformer::inverse(buffer, primary);
-                output.write(reinterpret_cast<const char*>(result.data()), result.size());
+            if (cache.size() >= 128 * 1024 + 3) {
+                flush_cache(output);
             }
         }
     }
 
     return true;
-}
-
-void flush_cache(std::basic_ostream<char>& output)
-{
-    uint32_t primary = 0;
-    std::memcpy(&primary, cache.data(), 3);
-    std::vector < uint8_t > buffer(begin(cache) + 3, end(cache));
-    std::vector<uint8_t> result;
-    if (cache.size() >= 128 * 1024 + 3) {
-        result = transformer::inverse(buffer, primary);
-    } else {
-        result = transformer::inverse_cpu(buffer, primary);
-    }
-
-    output.write(reinterpret_cast<const char*>(result.data()), result.size());
 }
 
 void decompress_from_stdin()
