@@ -22,6 +22,7 @@
 #include "argument_parser.h"
 #include "lzw.h"
 #include "utils.h"
+#include "transformer.h"
 #include <fstream>
 #include <thread>
 #include <chrono>
@@ -87,6 +88,36 @@ std::atomic < uint64_t > processed_size = 0;
         (in_buffer).clear();                        \
         break;                                      \
     }                                               \
+}
+
+std::vector< uint8_t > cache;
+
+void flush_cache(std::basic_ostream<char>& output)
+{
+    if (cache.empty()) {
+        return;
+    }
+
+    uint32_t primary = 0;
+    std::memcpy(&primary, cache.data(), 3);
+    std::vector < uint8_t > buffer;
+    bool inverse = false;
+    if (cache.size() >= 128 * 1024) {
+        buffer.insert(end(buffer), begin(cache) + 3, begin(cache) + 128 * 1024 + 3);
+        cache = std::vector<uint8_t>(begin(cache) + 128 * 1024 + 3, end(cache));
+        inverse = true;
+    } else {
+        buffer = std::vector<uint8_t>(begin(cache) + 3, end(cache));
+        cache.clear();
+    }
+    std::vector<uint8_t> result;
+    if (inverse && primary != 0xFFFFFF) {
+        result = transformer::inverse(buffer, primary);
+    } else {
+        result = buffer;
+    }
+
+    output.write(reinterpret_cast<const char*>(result.data()), static_cast<long>(result.size()));
 }
 
 bool decompress(std::basic_istream<char>& input, std::basic_ostream<char>& output)
@@ -220,19 +251,6 @@ bool decompress(std::basic_istream<char>& input, std::basic_ostream<char>& outpu
             } catch (std::out_of_range&) {
                 throw std::runtime_error("Unknown compression method, corrupted data?");
             }
-            // if (in_buffers[i].first == used_lzw) {
-            //     threads.emplace_back(decompress_lzw_block, &in_buffers[i].second, &out_buffers[i]);
-            // } else if (in_buffers[i].first == used_huffman) {
-            //     threads.emplace_back(decompress_huffman_lzw_block, &in_buffers[i].second, &out_buffers[i]);
-            // } else if (in_buffers[i].first == used_arithmetic) {
-            //     threads.emplace_back(decompress_arithmetic_block, &in_buffers[i].second, &out_buffers[i]);
-            // } else if (in_buffers[i].first == used_plain) {
-            //     threads.emplace_back(raw_copy_over, &in_buffers[i].second, &out_buffers[i]);
-            // } else if (in_buffers[i].first == used_arithmetic_lzw) {
-            //     threads.emplace_back(decompress_arithmetic_lzw_block, &in_buffers[i].second, &out_buffers[i]);
-            // } else {
-            //     throw std::runtime_error("Unknown compression method, corrupted data?");
-            // }
         }
     }
 
@@ -245,9 +263,13 @@ bool decompress(std::basic_istream<char>& input, std::basic_ostream<char>& outpu
 
     // write data in order
     for (unsigned i = 0; i < thread_count; ++i) {
-        auto & out_buffer = out_buffers[i];
-        if (!out_buffer.empty()) {
-            output.write(reinterpret_cast<char*>(out_buffer.data()), static_cast<std::streamsize>(out_buffer.size()));
+        if (auto & out_buffer = out_buffers[i];
+            !out_buffer.empty())
+        {
+            cache.append_range(out_buffer);
+            if (cache.size() >= 128 * 1024 + 3) {
+                flush_cache(output);
+            }
         }
     }
 
@@ -291,6 +313,8 @@ void decompress_from_stdin()
                 debug::info_log, ss.str(), "\n");
         }
     }
+
+    flush_cache(std::cout);
 
     if (verbose) {
         debug::log(debug::to_stderr, debug::cursor_on);
@@ -355,6 +379,8 @@ void decompress_file(const std::string& in, const std::string& out)
                 debug::info_log, ss.str(), "\n");
         }
     }
+
+    flush_cache(output_file);
 
     if (verbose) {
         debug::log(debug::to_stderr, debug::cursor_on);

@@ -25,6 +25,7 @@
 #include "Huffman.h"
 #include "arithmetic.h"
 #include "repeator.h"
+#include "transformer.h"
 #include <fstream>
 #include <thread>
 #include <chrono>
@@ -113,6 +114,12 @@ Arguments::predefined_args_t arguments = {
         .value_required = true,
         .explanation = "Set entropy threshold within [0, 8]"
     },
+    Arguments::single_arg_t {
+        .name = "no-inverse",
+        .short_name = 'N',
+        .value_required = false,
+        .explanation = "Disable BWT transformation before compression. Requires NVIDIA GPU"
+    },
 };
 
 std::atomic < unsigned > thread_count = 1;
@@ -135,6 +142,7 @@ std::map <uint8_t, uint64_t> arithmetic_lzw_frequency_map;
 std::map <uint8_t, uint64_t> repeator_frequency_map;
 std::map <uint8_t, uint64_t> raw_frequency_map;
 std::atomic < float > entropy_threshold = 7.5;
+std::atomic < bool > disable_inverse_compression = false;
 
 long double entropy_of(const std::vector<uint8_t>& data, std::map <uint8_t, uint64_t> & frequency_map)
 {
@@ -424,12 +432,66 @@ void compress_on_one_block(const std::vector<uint8_t> * in_buffer, std::vector<u
 
 std::atomic < int64_t > processed_size = 0;
 std::atomic < int64_t > compressed_size = 0;
+std::vector < uint8_t > cache;
+uint64_t offset = 0;
+
+class EndOfFile final : std::exception {};
 
 bool compress(std::basic_istream<char>& input, std::basic_ostream<char>& output)
 {
-    if (!input.good()) {
-        return false;
-    }
+    auto read = [&](char * buff, const uint64_t length)->uint64_t
+    {
+        if ((cache.size() - offset) < length)
+        {
+            uint64_t ret = 0;
+            std::memcpy(buff, cache.data() + offset, cache.size() - offset);
+            ret += cache.size() - offset;
+            cache.resize(128 * 1024);
+            input.read(reinterpret_cast<char*>(cache.data()), static_cast<std::streamsize>(cache.size()));
+            const auto actual_size = input.gcount();
+            cache.resize(actual_size);
+
+            if (actual_size == 0) {
+                cache.clear();
+                return ret;
+            }
+
+            std::vector<uint8_t> result;
+            uint64_t primary = 0;
+            if (disable_inverse_compression || actual_size < 128 * 1024) {
+                result = cache;
+                primary = -1;
+            } else {
+                if (const auto [result_, primary_] = transformer::forward(cache);
+                    primary_ != 0)
+                {
+                    result = result_;
+                    primary = primary_;
+                } else {
+                    result = cache;
+                    primary = -1;
+                }
+            }
+
+            cache.clear();
+            cache.push_back(reinterpret_cast<const uint8_t*>(&primary)[0]);
+            cache.push_back(reinterpret_cast<const uint8_t*>(&primary)[1]);
+            cache.push_back(reinterpret_cast<const uint8_t*>(&primary)[2]);
+            cache.insert(end(cache), begin(result), end(result));
+
+            const auto rsize = std::min(cache.size(), length - ret);
+            std::memcpy(buff + ret, cache.data(), rsize);
+            ret += rsize;
+            offset = rsize;
+            return ret;
+        }
+        else
+        {
+            std::memcpy(buff, cache.data() + offset, length);
+            offset += length;
+            return length;
+        }
+    };
 
     std::vector < std::vector<uint8_t> > in_buffers;
     std::vector < std::vector<uint8_t> > out_buffers;
@@ -442,14 +504,14 @@ bool compress(std::basic_istream<char>& input, std::basic_ostream<char>& output)
     {
         auto & in_buffer = in_buffers[i];
         in_buffer.resize(BLOCK_SIZE);
-        input.read(reinterpret_cast<char*>(in_buffer.data()), static_cast<std::streamsize>(in_buffer.size()));
-        const auto actual_size = input.gcount();
+        const auto actual_size =
+            read(reinterpret_cast<char*>(in_buffer.data()), static_cast<std::streamsize>(in_buffer.size()));
         if (actual_size == 0) {
             in_buffer.clear();
             break;
         }
         if (verbose) {
-            processed_size += actual_size;
+            processed_size += static_cast<long>(actual_size);
         }
         in_buffer.resize(actual_size);
     }
@@ -498,12 +560,9 @@ void compress_from_stdin()
 
     const auto before = std::chrono::system_clock::now();
 
-    while (std::cin.good())
+    while (!std::cin.eof() || !cache.empty())
     {
-        if (!compress(std::cin, std::cout)) {
-            break;
-        }
-
+        compress(std::cin, std::cout);
         if (std::stringstream ss;
             verbose && speed_from_time(before, ss, processed_size))
         {
@@ -554,12 +613,9 @@ void compress_file(const std::string& in, const std::string& out)
         compressed_size += sizeof(magic) + sizeof(BLOCK_SIZE);
     }
 
-    while (input_file.good())
+    while (!input_file.eof() || !cache.empty())
     {
-        if (!compress(input_file, output_file)) {
-            break;
-        }
-
+        compress(input_file, output_file);
         if (std::stringstream ss;
             verbose && speed_from_time(before, ss, processed_size, original_size, &seconds_left_sample_space))
         {
@@ -832,6 +888,7 @@ int main(const int argc, const char** argv)
         disable_huffman = static_cast<Arguments::args_t>(args).contains("no-huffman");
         disable_arithmetic = static_cast<Arguments::args_t>(args).contains("no-arithmetic");
         disable_arithmetic_lzw = static_cast<Arguments::args_t>(args).contains("no-lzw-overlay");
+        disable_inverse_compression = static_cast<Arguments::args_t>(args).contains("no-inverse");
 
         if (static_cast<Arguments::args_t>(args).contains("archive")) {
             disable_arithmetic = disable_lzw = disable_huffman = true;
